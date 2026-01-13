@@ -1,0 +1,338 @@
+# ============================================
+# KnowledgeFlow 应用配置
+# ============================================
+
+spring:
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  
+  application:
+    name: KnowledgeFlow
+
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+  # Jackson配置
+  jackson:
+    time-zone: GMT+8
+    date-format: yyyy-MM-DD HH:mm:ss
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+# Server配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+# Actuator配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# Logging配置
+logging:
+  level:
+    root: INFO
+    com.ray.knowledgeflow: DEBUG
+  pattern:
+    console: '%d{yyyy-MM-dd HH:mm:ss} - %msg%n'
+  file:
+    name: logs/knowledge-flow.log
+
+# SpringDoc OpenAPI配置
+springdoc:
+  api-docs:
+    enabled: true
+    path: /v3/api-docs
+  swagger-ui:
+    enabled: true
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+---
+# ============================================
+# 开发环境配置
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+  # 数据源配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/knowledge_flow?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: kflow
+    password: kflow_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      auto-commit: true
+      idle-timeout: 30000
+      pool-name: KnowledgeFlowHikariCP
+      max-lifetime: 1800000
+      connection-timeout: 30000
+
+  # Redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+    
+    # Elasticsearch配置
+    elasticsearch:
+      repositories:
+        enabled: true
+
+  # Neo4j配置
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: neo4j_password
+
+  # RabbitMQ配置
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: admin
+    password: admin_password
+    virtual-host: knowledge_flow
+    listener:
+      simple:
+        acknowledge-mode: manual
+        concurrency: 5
+        max-concurrency: 10
+        retry:
+          enabled: true
+          max-attempts: 3
+
+  # Security OAuth2 (GitHub)
+  security:
+    oauth2:
+      client:
+        registration:
+          github:
+            client-id: ${GITHUB_CLIENT_ID:your-github-client-id}
+            client-secret: ${GITHUB_CLIENT_SECRET:your-github-client-secret}
+            scope: read:user,user:email
+        provider:
+          github:
+            user-name-attribute: login
+
+# MyBatis-Plus配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+      id-type: auto
+  mapper-locations: classpath*:mapper/**/*.xml
+  type-aliases-package: com.ray.knowledgeflow.module.*.entity
+
+# Elasticsearch配置
+elasticsearch:
+  host: localhost
+  port: 9200
+  scheme: http
+
+# Qdrant配置
+qdrant:
+  host: localhost
+  port: 6333
+  api-key: ${QDRANT_API_KEY:}
+  use-tls: false
+
+# MinIO配置
+minio:
+  endpoint: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-name: knowledge-flow
+
+# Redisson配置
+redisson:
+  single-server-config:
+    address: redis://localhost:6379
+    database: 0
+    connection-pool-size: 64
+    connection-minimum-idle-size: 10
+    idle-connection-timeout: 10000
+    timeout: 3000
+
+# LangChain4j配置
+langchain4j:
+  open-ai:
+    api-key: ${OPENAI_API_KEY:your-openai-api-key}
+    model-name: gpt-3.5-turbo
+    temperature: 0.7
+    timeout: 30s
+
+# JWT配置
+jwt:
+  secret: ${JWT_SECRET:knowledgeflow-secret-key-change-this-in-production-min-256bits}
+  expiration: 604800000 # 7天
+  refresh-expiration: 2592000000 # 30天
+
+# 应用自定义配置
+app:
+  # 同步任务配置
+  sync:
+    github:
+      enabled: true
+      cron: '0 0 2 * * ?' # 每天凌晨2点
+    arxiv:
+      enabled: true
+      cron: '0 30 2 * * ?' # 每天凌晨2:30
+    rss:
+      enabled: true
+      cron: '0 0 */6 * * ?' # 每6小时
+  
+  # 文件存储配置
+  storage:
+    type: minio # local, minio
+    local-path: ./upload
+    max-size: 100MB
+  
+  # AI配置
+  ai:
+    provider: openai # openai, azure, ollama
+    embedding-model: all-minilm-l6-v2
+    rag:
+      chunk-size: 512
+      chunk-overlap: 50
+      top-k: 5
+
+---
+# ============================================
+# 测试环境配置
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: test
+
+  datasource:
+    url: jdbc:mysql://test-mysql-host:3306/knowledge_flow?useUnicode=true&characterEncoding=utf8&useSSL=true
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+
+  neo4j:
+    uri: ${NEO4J_URI}
+    authentication:
+      username: ${NEO4J_USERNAME}
+      password: ${NEO4J_PASSWORD}
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+logging:
+  level:
+    com.ray.knowledgeflow: INFO
+
+---
+# ============================================
+# 生产环境配置
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 50
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      ssl: true
+
+  neo4j:
+    uri: ${NEO4J_URI}
+    authentication:
+      username: ${NEO4J_USERNAME}
+      password: ${NEO4J_PASSWORD}
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
+
+elasticsearch:
+  host: ${ES_HOST}
+  port: ${ES_PORT:9200}
+  scheme: https
+  username: ${ES_USERNAME}
+  password: ${ES_PASSWORD}
+
+qdrant:
+  host: ${QDRANT_HOST}
+  port: ${QDRANT_PORT:6333}
+  api-key: ${QDRANT_API_KEY}
+  use-tls: true
+
+minio:
+  endpoint: ${MINIO_ENDPOINT}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+
+langchain4j:
+  open-ai:
+    api-key: ${OPENAI_API_KEY}
+    model-name: ${OPENAI_MODEL:gpt-4}
+
+jwt:
+  secret: ${JWT_SECRET}
+
+logging:
+  level:
+    root: WARN
+    com.ray.knowledgeflow: INFO
+  file:
+    name: /var/log/knowledge-flow/application.log

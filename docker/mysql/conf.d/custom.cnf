@@ -1,0 +1,29 @@
+[mysqld]
+# 字符集配置
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+
+# 连接配置
+max_connections=500
+max_allowed_packet=64M
+
+# 缓存配置
+innodb_buffer_pool_size=512M
+query_cache_size=0
+query_cache_type=0
+
+# 日志配置
+slow_query_log=1
+long_query_time=2
+slow_query_log_file=/var/lib/mysql/slow-query.log
+
+# InnoDB配置
+innodb_flush_log_at_trx_commit=2
+innodb_log_buffer_size=16M
+innodb_file_per_table=1
+
+# 时区
+default-time-zone='+8:00'
+
+[client]
+default-character-set=utf8mb4
