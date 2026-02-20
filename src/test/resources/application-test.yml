@@ -1,0 +1,36 @@
+spring:
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: password
+  rabbitmq:
+    host: localhost
+    port: 5672
+    listener:
+      simple:
+        auto-startup: false
+  elasticsearch:
+    uris: http://localhost:9200
+  data:
+    elasticsearch:
+      repositories:
+        enabled: false
+
+qdrant:
+  host: localhost
+  port: 6334
+  api-key: dummy
+
+langchain4j:
+  open-ai:
+    api-key: dummy
+    base-url: https://api.deepseek.com
+    model-name: deepseek-chat
+
+ZHIPUAI_API_KEY: dummy
+
+knowledge-flow:
+  ai:
+    zhipuai:
+      api-key: dummy

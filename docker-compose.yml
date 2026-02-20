@@ -1,4 +1,4 @@
-version: '3.8'
+# KnowledgeFlow Docker Compose 配置文件
 
 # 自定义网络
 networks:
@@ -15,6 +15,7 @@ volumes:
   qdrant-data:
   minio-data:
   rabbitmq-data:
+
 
 services:
   # MySQL 8.0 - 主数据库
@@ -40,7 +41,7 @@ services:
       - --default-authentication-plugin=mysql_native_password
       - --max_connections=500
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-root_password}" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,7 +61,7 @@ services:
       - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf
     command: redis-server /usr/local/etc/redis/redis.conf
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -69,7 +70,7 @@ services:
 
   # Elasticsearch 8.x - 全文检索
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     container_name: knowledge-flow-elasticsearch
     restart: unless-stopped
     environment:
@@ -86,7 +87,7 @@ services:
       - elasticsearch-data:/usr/share/elasticsearch/data
       - ./docker/elasticsearch/plugins:/usr/share/elasticsearch/plugins
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -113,7 +114,7 @@ services:
       - neo4j-data:/data
       - ./docker/neo4j/plugins:/plugins
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider http://localhost:7474 || exit 1"]
+      test: [ "CMD-SHELL", "wget --spider http://localhost:7474 || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -132,7 +133,7 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider http://localhost:6333/healthz || exit 1"]
+      test: [ "CMD-SHELL", "nc -z localhost 6333 || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -154,7 +155,7 @@ services:
       - minio-data:/data
     command: server /data --console-address ":9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 30s
       timeout: 20s
       retries: 3
@@ -177,7 +178,7 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      test: [ "CMD", "rabbitmq-diagnostics", "ping" ]
       interval: 30s
       timeout: 10s
       retries: 5

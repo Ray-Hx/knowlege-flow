@@ -9,8 +9,6 @@ max_allowed_packet=64M
 
 # 缓存配置
 innodb_buffer_pool_size=512M
-query_cache_size=0
-query_cache_type=0
 
 # 日志配置
 slow_query_log=1

@@ -36,11 +36,19 @@ public class Result<T> implements Serializable {
         return new Result<>(200, message, data);
     }
 
-    public static <T> Result<T> error(String message) {
+    public static <T> Result<T> fail(String message) {
         return new Result<>(500, message, null);
     }
 
-    public static <T> Result<T> error(Integer code, String message) {
+    public static <T> Result<T> fail(Integer code, String message) {
         return new Result<>(code, message, null);
+    }
+
+    public static <T> Result<T> failed(String message) {
+        return fail(message);
+    }
+
+    public static <T> Result<T> failed(Integer code, String message) {
+        return fail(code, message);
     }
 }

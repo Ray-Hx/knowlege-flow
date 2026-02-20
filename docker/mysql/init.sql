@@ -5,8 +5,7 @@
 -- 创建数据库（如果不存在）
 CREATE DATABASE IF NOT EXISTS knowledge_flow 
   CHARACTER SET utf8mb4 
-  COLLATE utf8mb4_unicode_ci
-  COMMENT '知识流平台主数据库';
+  COLLATE utf8mb4_unicode_ci;
 
 -- 创建应用用户
 CREATE USER IF NOT EXISTS 'kflow'@'%' IDENTIFIED BY 'kflow_password';

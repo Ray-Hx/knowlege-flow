@@ -78,7 +78,7 @@ spring:
   datasource:
     url: jdbc:mysql://localhost:3306/knowledge_flow?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: kflow
-    password: kflow_password
+    password: kflow_password_change_me
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       minimum-idle: 5
@@ -113,18 +113,18 @@ spring:
     uri: bolt://localhost:7687
     authentication:
       username: neo4j
-      password: neo4j_password
+      password: neo4j_password_change_me
 
   # RabbitMQ配置
   rabbitmq:
     host: localhost
     port: 5672
     username: admin
-    password: admin_password
+    password: admin_password_change_me
     virtual-host: knowledge_flow
     listener:
       simple:
-        acknowledge-mode: manual
+        acknowledge-mode: auto
         concurrency: 5
         max-concurrency: 10
         retry:
@@ -156,7 +156,8 @@ mybatis-plus:
       logic-not-delete-value: 0
       id-type: auto
   mapper-locations: classpath*:mapper/**/*.xml
-  type-aliases-package: com.ray.knowledgeflow.module.*.entity
+  # Do not automatically generate type aliases to avoid conflicts
+  # type-aliases-package: com.ray.knowledgeflow.module.*.entity
 
 # Elasticsearch配置
 elasticsearch:
@@ -167,7 +168,7 @@ elasticsearch:
 # Qdrant配置
 qdrant:
   host: localhost
-  port: 6333
+  port: 6334  # gRPC 端口 (注意：6333 是 REST API 端口，gRPC 需要 6334)
   api-key: ${QDRANT_API_KEY:}
   use-tls: false
 
@@ -191,10 +192,14 @@ redisson:
 # LangChain4j配置
 langchain4j:
   open-ai:
-    api-key: ${OPENAI_API_KEY:your-openai-api-key}
-    model-name: gpt-3.5-turbo
+    base-url: ${OPENAI_BASE_URL:https://api.deepseek.com}
+    api-key: ${OPENAI_API_KEY:}
+    model-name: ${OPENAI_MODEL_NAME:deepseek-chat}
     temperature: 0.7
     timeout: 30s
+
+# Zhipu AI 配置
+ZHIPUAI_API_KEY: ca684c9cb0e44777bec1e5136718fa81.xPxn601GXuf2EiK3
 
 # JWT配置
 jwt:
@@ -324,7 +329,7 @@ minio:
 
 langchain4j:
   open-ai:
-    api-key: ${OPENAI_API_KEY}
+    api-key: ${OPENAI_API_KEY:}
     model-name: ${OPENAI_MODEL:gpt-4}
 
 jwt:
@@ -336,3 +341,15 @@ logging:
     com.ray.knowledgeflow: INFO
   file:
     name: /var/log/knowledge-flow/application.log
+
+# ==================== Resilience4j 限流配置 ====================
+resilience4j:
+  ratelimiter:
+    instances:
+      ai-service:
+        # 每秒最多 5 个请求（根据 DeepSeek API 限制配置）
+        limit-for-period: 5
+        limit-refresh-period: 1s
+        timeout-duration: 10s
+        # 是否允许等待健康记录的发布者
+        register-health-indicator: true

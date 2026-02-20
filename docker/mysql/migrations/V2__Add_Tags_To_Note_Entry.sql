@@ -1,0 +1,1 @@
+ALTER TABLE note_entry ADD COLUMN tags VARCHAR(500) COMMENT '标签，逗号分隔';
