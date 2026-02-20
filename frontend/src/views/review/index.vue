@@ -36,7 +36,7 @@ const startReview = async () => {
       message.info('没有需要复习的笔记')
     }
   } catch (e) {
-    message.error('加载笔记失败')
+    message.error(e.message || '加载笔记失败')
   } finally {
     loading.value = false
   }
@@ -54,7 +54,7 @@ const initQueue = async () => {
     message.success('复习队列已初始化')
     fetchStats()
   } catch (e) {
-    message.error('初始化失败')
+    message.error(e.message || '初始化失败')
   } finally {
     initializing.value = false
   }

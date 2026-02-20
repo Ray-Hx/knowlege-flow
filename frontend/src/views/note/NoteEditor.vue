@@ -314,7 +314,7 @@ const loadNote = async () => {
             }
         }
     } catch (error) {
-        message.error('加载笔记失败')
+        message.error(error.message || '加载笔记失败')
     }
 }
 
@@ -351,7 +351,7 @@ const saveNote = async () => {
             }
         }
     } catch (error) {
-        message.error('保存失败')
+        message.error(error.message || '保存失败')
     } finally {
         saving.value = false
     }

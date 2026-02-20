@@ -260,7 +260,7 @@ const fetchData = async () => {
     }
 
   } catch (e) {
-    message.error('加载主页失败')
+    message.error(e.message || '加载主页失败')
   } finally {
     loading.value = false
   }
@@ -272,7 +272,7 @@ const fetchNotes = async () => {
     notes.value = res.records
     pagination.value.total = res.total
   } catch (e) {
-    message.error('加载笔记失败')
+    message.error(e.message || '加载笔记失败')
   }
 }
 
@@ -300,7 +300,7 @@ const handleFollow = async () => {
       profile.value.followerCount += 1
     }
   } catch (error) {
-    message.error('关注失败')
+    message.error(error.message || '关注失败')
   } finally {
     followLoading.value = false
   }
@@ -316,7 +316,7 @@ const handleUnfollow = async () => {
       profile.value.followerCount = Math.max(0, profile.value.followerCount - 1)
     }
   } catch (error) {
-    message.error('操作失败')
+    message.error(error.message || '操作失败')
   } finally {
     followLoading.value = false
   }

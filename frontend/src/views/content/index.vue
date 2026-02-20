@@ -34,7 +34,7 @@ const fetchSources = async () => {
         const data = await contentApi.listSources()
         sources.value = data
     } catch (error) {
-        message.error('获取订阅源失败')
+        message.error(error.message || '获取订阅源失败')
     }
 }
 
@@ -48,7 +48,7 @@ const fetchItems = async () => {
         })
         items.value = data.records
     } catch (error) {
-        message.error('获取内容失败')
+        message.error(error.message || '获取内容失败')
     } finally {
         loading.value = false
     }
@@ -61,7 +61,7 @@ const handleAddSource = async () => {
         showAddModal.value = false
         fetchSources()
     } catch (error) {
-        message.error('添加失败')
+        message.error(error.message || '添加失败')
     }
 }
 
@@ -81,7 +81,7 @@ const handleDeleteSource = (id: number) => {
                     fetchItems()
                 }
             } catch (error) {
-                message.error('删除失败')
+                message.error(error.message || '删除失败')
             }
         }
     })

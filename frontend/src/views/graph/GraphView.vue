@@ -674,7 +674,7 @@ const analyzeRelations = async () => {
             }
         }
     } catch (e) {
-        message.error('AI 分析失败，请稍后重试')
+        message.error(e.message || 'AI 分析失败，请稍后重试')
         console.error(e)
     } finally {
         aiAnalyzing.value = false
@@ -847,7 +847,7 @@ async function handleAnalyze() {
 
     } catch (error) {
         console.error(error)
-        message.error('生成解析失败，请稍后重试')
+        message.error(error.message || '生成解析失败，请稍后重试')
     } finally {
         analyzing.value = false
     }

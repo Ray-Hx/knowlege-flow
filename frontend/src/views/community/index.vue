@@ -221,7 +221,7 @@ const fetchNotes = async () => {
     notes.value = res.records
     totalPages.value = res.pages
   } catch (error) {
-    message.error('获取社区动态失败，请检查是否已登录')
+    message.error(error.message || '获取社区动态失败，请检查是否已登录')
     console.error(error)
   } finally {
     loading.value = false
@@ -243,7 +243,7 @@ const fetchRanking = async () => {
     const res = await getRanking(10)
     rankingList.value = res
   } catch (error) {
-    message.error('获取排行榜失败')
+    message.error(error.message || '获取排行榜失败')
     console.error(error)
   } finally {
     rankingLoading.value = false

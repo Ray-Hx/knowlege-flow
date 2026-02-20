@@ -117,7 +117,7 @@ const fetchNote = async (id: number) => {
     incomingLinks.value = res.incomingLinks || []
     contentLinks.value = res.contentLinks || []
   } catch (e: any) {
-    message.error('加载笔记失败')
+    message.error(e.message || '加载笔记失败')
     router.push('/notes')
   } finally {
     loading.value = false

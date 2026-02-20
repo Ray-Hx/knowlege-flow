@@ -49,8 +49,7 @@ request.interceptors.response.use(
             // Maybe it's a direct response or mock data
             return response.data
         } else {
-            message.error(msg || 'Request Error')
-            return Promise.reject(new Error(msg || 'Request Error'))
+            return Promise.reject(new Error(msg || '请求失败'))
         }
     },
     async (error) => {
@@ -98,8 +97,7 @@ request.interceptors.response.use(
                     msg = error.response.data?.message || error.response.data?.msg || `请求错误 ${status}`
             }
         }
-        message.error(msg)
-        return Promise.reject(error)
+        return Promise.reject(new Error(msg))
     }
 )
 

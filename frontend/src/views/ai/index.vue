@@ -65,7 +65,7 @@ const fetchConversations = async () => {
       selectConversation(conversations.value[0].id)
     }
   } catch (e) {
-    message.error('加载对话列表失败')
+    message.error(e.message || '加载对话列表失败')
   } finally {
     loadingConversations.value = false
   }
@@ -80,7 +80,7 @@ const selectConversation = async (id: number) => {
     messages.value = await aiApi.getMessages(id)
     scrollToBottom()
   } catch (e) {
-    message.error('加载消息失败')
+    message.error(e.message || '加载消息失败')
   } finally {
     loadingMessages.value = false
   }
@@ -92,7 +92,7 @@ const createConversation = async () => {
     conversations.value.unshift(conv)
     selectConversation(conv.id)
   } catch (e) {
-    message.error('创建对话失败')
+    message.error(e.message || '创建对话失败')
   }
 }
 
@@ -110,7 +110,7 @@ const deleteConversation = async (e: Event, id: number) => {
     }
     message.success('已删除')
   } catch (e) {
-    message.error('删除失败')
+    message.error(e.message || '删除失败')
   }
 }
 
@@ -136,7 +136,7 @@ const handleSend = async () => {
     messages.value.push(aiMsg)
     scrollToBottom()
   } catch (e) {
-    message.error('发送消息失败')
+    message.error(e.message || '发送消息失败')
   } finally {
     sending.value = false
   }
@@ -163,7 +163,7 @@ const syncNotesToKnowledge = async () => {
     const count = await noteApi.rebuildIndex()
     message.success(`已同步 ${count} 条笔记到知识库`)
   } catch (e) {
-    message.error('同步失败，请稍后重试')
+    message.error(e.message || '同步失败，请稍后重试')
   } finally {
     syncing.value = false
   }

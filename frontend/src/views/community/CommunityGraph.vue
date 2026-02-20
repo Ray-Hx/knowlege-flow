@@ -236,7 +236,7 @@ const fetchGlobalGraph = async () => {
     const res = await getGlobalGraph(nodeLimit.value)
     rawNodes.value = res || []
   } catch (error) {
-    message.error('观测星空失败，请稍后重试')
+    message.error(error.message || '观测星空失败，请稍后重试')
     console.error(error)
   } finally {
     loading.value = false

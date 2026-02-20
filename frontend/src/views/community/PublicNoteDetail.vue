@@ -288,7 +288,7 @@ const submitComment = async () => {
     message.success('评论发表成功')
     await loadComments(noteId)
   } catch (e) {
-    message.error('评论失败，请稍后重试')
+    message.error(e.message || '评论失败，请稍后重试')
   } finally {
     submitLoading.value = false
   }
@@ -307,7 +307,7 @@ const handleDeleteComment = (commentId: number) => {
         message.success('评论已删除')
         await loadComments(noteId)
       } catch (e) {
-        message.error('删除失败')
+        message.error(e.message || '删除失败')
       }
     }
   })
@@ -334,7 +334,7 @@ const handleLike = async () => {
         likeCount.value = result.likeCount
         message.success(result.liked ? '点赞成功' : '已取消点赞')
     } catch (e) {
-        message.error('操作失败，请登录后重试')
+        message.error(e.message || '操作失败，请登录后重试')
     } finally {
         likeLoading.value = false
     }
@@ -388,7 +388,7 @@ const loadNote = async () => {
           loadRelatedNotes(id)
         ])
     } catch (e) {
-        message.error('加载笔记失败')
+        message.error(e.message || '加载笔记失败')
         loading.value = false
     }
 }

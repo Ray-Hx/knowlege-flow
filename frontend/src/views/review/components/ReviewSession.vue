@@ -85,7 +85,7 @@ const handleGrade = async (quality: number) => {
       emit('finish')
     }
   } catch (e) {
-    message.error('提交失败，请重试')
+    message.error(e.message || '提交失败，请重试')
   } finally {
     submitting.value = false
   }

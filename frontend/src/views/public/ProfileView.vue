@@ -21,7 +21,7 @@ const fetchProfile = async () => {
     profile.value = await publicApi.getProfile(username.value)
     fetchNotes()
   } catch (e) {
-    message.error('用户不存在或无法访问')
+    message.error(e.message || '用户不存在或无法访问')
     profile.value = null // Reset
   } finally {
     loading.value = false
