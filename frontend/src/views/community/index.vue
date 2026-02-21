@@ -120,9 +120,12 @@
         <div v-if="notes.length > 0" class="flex justify-center mt-6 pb-2 shrink-0">
            <n-pagination
              v-model:page="page"
+             v-model:page-size="size"
              :page-count="totalPages"
-             :page-size="size"
+             :page-sizes="[12, 24, 36, 48]"
+             show-size-picker
              @update:page="handlePageChange"
+             @update:page-size="handlePageSizeChange"
            />
         </div>
       </div>
@@ -239,6 +242,13 @@ const handleTabChange = (val: string) => {
 // 处理翻页
 const handlePageChange = (p: number) => {
   page.value = p
+  fetchNotes()
+}
+
+// 处理每页条数改变
+const handlePageSizeChange = (s: number) => {
+  size.value = s
+  page.value = 1 // 重置到第一页
   fetchNotes()
 }
 
