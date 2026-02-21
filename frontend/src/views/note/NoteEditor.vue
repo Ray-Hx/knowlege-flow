@@ -358,16 +358,17 @@ const initVditor = () => {
                 path: 'https://cdn.jsdelivr.net/npm/vditor/dist/css/content-theme',
             },
             transform(html: string) {
-                // 渲染 [[!article:id|title]] 为文章引用徽章
-                html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_match, id, title) => {
-                    const displayTitle = title || `文章引用 #${id}`;
-                    return `<a class="article-ref-badge" href="/content/article/${id}" target="_blank" data-id="${id}">📰 ${displayTitle}</a>`;
+                // 渲染 [[!article:id|标题]] 为文章引用徽章
+                html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_, id, title) => {
+                    const displayTitle = title ? title : `文章引用 #${id}`
+                    // 这里我们为了演示好看只显示 span 徽章，或者如果要跳转可写成 a 标签
+                    // 但通常外部文章链接需要通过 contentLinks 在详情页呈现，这里只改名
+                    return `<span class="article-ref-badge" data-id="${id}">📰 ${displayTitle}</span>`
                 })
-                // 渲染 [[笔记标题]] 为笔记链接（由于没有id，这里使用路由参数跳转，如果不确定路径，最好由组件统一接管，我们这里先用查询参数或者单纯样式展示）
-                // 注：如果是 NoteEditor 里自己笔记间的引用，为了可以跳转，跳到全局的搜索或者一个默认路由
-                html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, 
-                    '<a class="note-ref-badge" href="/notes?keyword=$1" target="_blank">📝 $1</a>'
-                )
+                // 渲染 [[笔记标题]] 为笔记跳转链接
+                html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
+                    return `<a class="note-ref-badge" href="/#/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                })
                 return html
             }
         },
@@ -534,36 +535,34 @@ onUnmounted(() => {
 
 <!-- 全局样式用于 Vditor 内部渲染 -->
 <style>
-a.article-ref-badge {
+.article-ref-badge {
     display: inline-block;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white !important;
+    color: white;
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 13px;
     margin: 0 2px;
     cursor: pointer;
-    text-decoration: none !important;
 }
 
-a.article-ref-badge:hover {
+.article-ref-badge:hover {
     opacity: 0.9;
     transform: scale(1.02);
 }
 
-a.note-ref-badge {
+.note-ref-badge {
     display: inline-block;
     background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    color: white !important;
+    color: white;
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 13px;
     margin: 0 2px;
     cursor: pointer;
-    text-decoration: none !important;
 }
 
-a.note-ref-badge:hover {
+.note-ref-badge:hover {
     opacity: 0.9;
     transform: scale(1.02);
 }

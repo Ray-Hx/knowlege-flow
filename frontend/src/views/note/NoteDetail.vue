@@ -67,7 +67,7 @@ const openArticleModal = () => {
 
 // 插入文章引用（使用标题）
 const insertArticle = (article: ContentItem) => {
-  const ref = `[[!article:${article.id}]]`
+  const ref = `[[!article:${article.id}|${article.title}]]`
   model.value.contentMd += `\n${ref}`
   showArticleModal.value = false
   message.success(`已插入引用: ${article.title}`)

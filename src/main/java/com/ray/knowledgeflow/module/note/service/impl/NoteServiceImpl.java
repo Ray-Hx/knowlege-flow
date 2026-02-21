@@ -76,8 +76,8 @@ public class NoteServiceImpl implements INoteService {
 
     // 笔记链接正则: [[笔记标题]]
     private static final Pattern LINK_PATTERN = Pattern.compile("\\[\\[([^!][^\\]]*?)\\]\\]");
-    // 内容引用正则: [[!article:123]] 或 [[!source:标题]]
-    private static final Pattern CONTENT_LINK_PATTERN = Pattern.compile("\\[\\[!article:(\\d+)(?:\\|.*?)?\\]\\]");
+    // 内容引用正则: [[!article:123]] 或 [[!article:123|标题]]
+    private static final Pattern CONTENT_LINK_PATTERN = Pattern.compile("\\[\\[!article:(\\d+)(?:\\|([^\\]]+))?\\]\\]");
     private static final int MAX_VERSIONS = 20;
 
     @Override
