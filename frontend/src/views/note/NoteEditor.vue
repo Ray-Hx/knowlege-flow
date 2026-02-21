@@ -333,6 +333,7 @@ const loadNote = async () => {
             noteTitle.value = data.title
             initialContent.value = data.contentMd
             isPublic.value = data.isPublic === 1
+            selectedFolderId.value = data.folderId || 0
             if (vditor.value) {
                 vditor.value.setValue(data.contentMd)
             }
@@ -355,6 +356,7 @@ const saveNote = async () => {
             await noteApi.updateNote(noteId.value, {
                 title: noteTitle.value,
                 contentMd: content,
+                folderId: selectedFolderId.value,
                 status: 2, // 默认发布
                 isPublic: isPublic.value ? 1 : 0
             })
