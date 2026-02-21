@@ -54,6 +54,19 @@ const initVditor = () => {
     after: () => {
       vditor.value?.setValue(props.modelValue)
     },
+    preview: {
+      theme: { current: 'light' },
+      transform(html: string) {
+        html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_match, id, title) => {
+            const displayTitle = title || `文章引用 #${id}`;
+            return `<a class="article-ref-badge" href="/content/article/${id}" target="_blank">📰 ${displayTitle}</a>`;
+        })
+        html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, 
+            '<a class="note-ref-badge" href="/notes?keyword=$1" target="_blank">📝 $1</a>'
+        )
+        return html
+      }
+    },
     input: (val) => {
       emit('update:modelValue', val)
     }
@@ -95,5 +108,39 @@ defineExpose({
 :deep(.vditor) {
   border: 1px solid #e5e7eb;
   border-radius: 0.375rem;
+}
+</style>
+
+<style>
+/* 继承全局样式用于 Vditor 内部渲染 */
+a.article-ref-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white !important;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    margin: 0 2px;
+    cursor: pointer;
+    text-decoration: none !important;
+}
+a.article-ref-badge:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+a.note-ref-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white !important;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    margin: 0 2px;
+    cursor: pointer;
+    text-decoration: none !important;
+}
+a.note-ref-badge:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
 }
 </style>

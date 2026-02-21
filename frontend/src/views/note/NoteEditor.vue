@@ -194,7 +194,7 @@ const openInsertModal = () => {
 const insertFeature = (type: string, item: any) => {
     let insertStr = ''
     if (type === 'article') {
-        insertStr = `[[!article:${item.id}]]`
+        insertStr = `[[!article:${item.id}|${item.title}]]`
     } else if (type === 'my_note') {
         insertStr = `[[${item.title}]]`
     } else if (type === 'community_note') {
@@ -358,13 +358,15 @@ const initVditor = () => {
                 path: 'https://cdn.jsdelivr.net/npm/vditor/dist/css/content-theme',
             },
             transform(html: string) {
-                // 渲染 [[!article:id]] 为文章引用徽章
-                html = html.replace(/\[\[!article:(\d+)\]\]/g, 
-                    '<span class="article-ref-badge" data-id="$1">📰 文章引用 #$1</span>'
-                )
-                // 渲染 [[笔记标题]] 为笔记链接
+                // 渲染 [[!article:id|title]] 为文章引用徽章
+                html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_match, id, title) => {
+                    const displayTitle = title || `文章引用 #${id}`;
+                    return `<a class="article-ref-badge" href="/content/article/${id}" target="_blank" data-id="${id}">📰 ${displayTitle}</a>`;
+                })
+                // 渲染 [[笔记标题]] 为笔记链接（由于没有id，这里使用路由参数跳转，如果不确定路径，最好由组件统一接管，我们这里先用查询参数或者单纯样式展示）
+                // 注：如果是 NoteEditor 里自己笔记间的引用，为了可以跳转，跳到全局的搜索或者一个默认路由
                 html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, 
-                    '<span class="note-ref-badge">📝 $1</span>'
+                    '<a class="note-ref-badge" href="/notes?keyword=$1" target="_blank">📝 $1</a>'
                 )
                 return html
             }
@@ -532,34 +534,36 @@ onUnmounted(() => {
 
 <!-- 全局样式用于 Vditor 内部渲染 -->
 <style>
-.article-ref-badge {
+a.article-ref-badge {
     display: inline-block;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+    color: white !important;
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 13px;
     margin: 0 2px;
     cursor: pointer;
+    text-decoration: none !important;
 }
 
-.article-ref-badge:hover {
+a.article-ref-badge:hover {
     opacity: 0.9;
     transform: scale(1.02);
 }
 
-.note-ref-badge {
+a.note-ref-badge {
     display: inline-block;
     background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    color: white;
+    color: white !important;
     padding: 2px 10px;
     border-radius: 12px;
     font-size: 13px;
     margin: 0 2px;
     cursor: pointer;
+    text-decoration: none !important;
 }
 
-.note-ref-badge:hover {
+a.note-ref-badge:hover {
     opacity: 0.9;
     transform: scale(1.02);
 }

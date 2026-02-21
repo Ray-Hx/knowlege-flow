@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NButton, NIcon, NSpace, NTag, NSpin, useMessage } from 'naive-ui'
 import { ArrowBackOutline, SaveOutline, ShareSocialOutline, TrashOutline } from '@vicons/ionicons5'
 import { MOCK_NOTES } from '@/api/mockData'
-import { getNoteDetail, updateNote, deleteNote as deleteNoteApi } from '@/api/note'
+import { noteApi } from '@/api/note'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 
@@ -22,18 +22,16 @@ const useMock = ref(false) // Tracks if using mock data
 onMounted(async () => {
   try {
     // Try real API first
-    const res = await getNoteDetail(noteId)
-    if (res.code === 200 && res.data) {
+    const res = await noteApi.getNoteDetail(noteId)
+    if (res) {
       note.value = {
-        id: res.data.id,
-        title: res.data.title,
-        content: res.data.content || '',
-        summary: res.data.summary,
-        tags: res.data.tags || [],
-        updatedAt: res.data.updatedTime
+        id: res.id,
+        title: res.title,
+        content: res.contentMd || '',
+        summary: res.summary,
+        tags: res.tags || [],
       }
-    } else {
-      throw new Error('API returned no data')
+      note.value.updatedAt = new Date().toLocaleString()
     }
   } catch (error) {
     console.warn('Backend unavailable, using mock data:', error)
@@ -45,8 +43,8 @@ onMounted(async () => {
       summary: '',
       content: '# New Note\n\nStart writing...',
       tags: [],
-      updatedAt: new Date().toLocaleString()
     }
+    note.value.updatedAt = new Date().toLocaleString()
   } finally {
     loading.value = false
     // Initialize Vditor after data is loaded
@@ -76,6 +74,19 @@ function initVditor() {
         input: (value) => {
             if (note.value) {
                 note.value.content = value
+            }
+        },
+        preview: {
+            theme: { current: 'light' },
+            transform(html: string) {
+                html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_match, id, title) => {
+                    const displayTitle = title || `文章引用 #${id}`;
+                    return `<a class="article-ref-badge" href="/content/article/${id}" target="_blank">📰 ${displayTitle}</a>`;
+                })
+                html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, 
+                    '<a class="note-ref-badge" href="/notes?keyword=$1" target="_blank">📝 $1</a>'
+                )
+                return html
             }
         }
     }

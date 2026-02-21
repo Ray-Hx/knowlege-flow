@@ -287,7 +287,7 @@ const submitComment = async () => {
     replyTo.value = null
     message.success('评论发表成功')
     await loadComments(noteId)
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '评论失败，请稍后重试')
   } finally {
     submitLoading.value = false
@@ -306,7 +306,7 @@ const handleDeleteComment = (commentId: number) => {
         await deleteComment(noteId, commentId)
         message.success('评论已删除')
         await loadComments(noteId)
-      } catch (e) {
+      } catch (e: any) {
         message.error(e.message || '删除失败')
       }
     }
@@ -317,7 +317,7 @@ const loadComments = async (noteId: number) => {
   commentsLoading.value = true
   try {
     comments.value = await getComments(noteId)
-  } catch (e) {
+  } catch (e: any) {
     // 静默失败，不影响主流程
   } finally {
     commentsLoading.value = false
@@ -333,8 +333,8 @@ const handleLike = async () => {
         isLiked.value = result.liked
         likeCount.value = result.likeCount
         message.success(result.liked ? '点赞成功' : '已取消点赞')
-    } catch (e) {
-        message.error(e.message || '操作失败，请登录后重试')
+    } catch (e: any) {
+        message.warning('您还未登录，请先登录')
     } finally {
         likeLoading.value = false
     }
@@ -371,11 +371,12 @@ const loadNote = async () => {
                     current: 'light'
                 },
                  transform(html: string) {
-                    html = html.replace(/\[\[!article:(\d+)\]\]/g, 
-                        '<span class="article-ref-badge" style="cursor:default">📰 文章引用</span>'
-                    )
+                    html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_match, id, title) => {
+                        const displayTitle = title || `文章引用 #${id}`;
+                        return `<a class="article-ref-badge" href="/content/article/${id}" target="_blank">📰 ${displayTitle}</a>`;
+                    })
                     html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, 
-                        '<span class="note-ref-badge" style="cursor:default">📝 $1</span>'
+                        '<a class="note-ref-badge" href="/notes?keyword=$1" target="_blank">📝 $1</a>'
                     )
                     return html
                 }
@@ -387,7 +388,7 @@ const loadNote = async () => {
           loadComments(id),
           loadRelatedNotes(id)
         ])
-    } catch (e) {
+    } catch (e: any) {
         message.error(e.message || '加载笔记失败')
         loading.value = false
     }
@@ -396,7 +397,7 @@ const loadNote = async () => {
 const loadRelatedNotes = async (id: number) => {
     try {
         relatedNotes.value = await getRelatedPublicNotes(id, 4)
-    } catch (e) {
+    } catch (e: any) {
         console.error('获取相关推荐失败', e)
     }
 }
@@ -406,6 +407,39 @@ onMounted(() => {
 })
 </script>
 
-<style scoped>
+<style>
 /* 继承 Vditor 全局样式 */
+a.article-ref-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white !important;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    margin: 0 2px;
+    cursor: pointer;
+    text-decoration: none !important;
+}
+
+a.article-ref-badge:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
+
+a.note-ref-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+    color: white !important;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    margin: 0 2px;
+    cursor: pointer;
+    text-decoration: none !important;
+}
+
+a.note-ref-badge:hover {
+    opacity: 0.9;
+    transform: scale(1.02);
+}
 </style>
