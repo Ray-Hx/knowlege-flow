@@ -376,7 +376,12 @@ const loadNote = async () => {
                         return `<span class="article-ref-badge" style="cursor:pointer" onclick="window.open('/content', '_blank')">📰 ${displayTitle}</span>`
                     })
                     html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
-                        return `<a class="note-ref-badge" href="/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                        // 在游客模式下，由于不知道 ID，只能弹窗或者去搜索页
+                        return `<a class="note-ref-badge" href="/community/feed?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                    })
+                    // 拦截普通的 [笔记标题](/community/note/ID) 让它有胶囊样式
+                    html = html.replace(/<a([^>]+)href="\/community\/note\/(\d+)"([^>]*)>(.*?)<\/a>/g, (_, p1, id, p2, text) => {
+                        return `<a${p1}href="/community/note/${id}" target="_blank" class="note-ref-badge" style="text-decoration: none;"${p2}>📝 ${text}</a>`
                     })
                     return html
                 }

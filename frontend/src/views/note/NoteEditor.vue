@@ -196,7 +196,7 @@ const insertFeature = (type: string, item: any) => {
     if (type === 'article') {
         insertStr = `[[!article:${item.id}|${item.title}]]`
     } else if (type === 'my_note') {
-        insertStr = `[[${item.title}]]`
+        insertStr = `[${item.title}](/community/note/${item.id})`
     } else if (type === 'community_note') {
         insertStr = `[${item.title}](/community/note/${item.id})`
     }
@@ -368,6 +368,10 @@ const initVditor = () => {
                 // 渲染 [[笔记标题]] 为笔记跳转链接
                 html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
                     return `<a class="note-ref-badge" href="/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                })
+                // 拦截普通的 [笔记标题](/community/note/ID) 让它有胶囊样式
+                html = html.replace(/<a([^>]+)href="\/community\/note\/(\d+)"([^>]*)>(.*?)<\/a>/g, (_, p1, id, p2, text) => {
+                    return `<a${p1}href="/community/note/${id}" target="_blank" class="note-ref-badge" style="text-decoration: none;"${p2}>📝 ${text}</a>`
                 })
                 return html
             }
