@@ -117,7 +117,7 @@
         </div>
         
         <!-- 分页控制 -->
-        <div v-if="totalItems > 0" class="flex flex-col md:flex-row items-center justify-center gap-4 mt-6 pb-2 shrink-0">
+        <div v-if="notes.length > 0" class="flex flex-col md:flex-row items-center justify-center gap-4 mt-6 pb-2 shrink-0">
            <n-pagination
              :page="page"
              :page-size="size"
@@ -125,8 +125,8 @@
              :page-sizes="[12, 24, 36, 48]"
              show-size-picker
              show-quick-jumper
-             :on-update:page="onPageChange"
-             :on-update:page-size="onPageSizeChange"
+             @update:page="onPageChange"
+             @update:page-size="onPageSizeChange"
            />
            <div class="flex items-center gap-2 text-sm text-gray-500">
              <span>自定义每页</span>
