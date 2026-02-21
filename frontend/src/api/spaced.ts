@@ -12,15 +12,14 @@ export interface ReviewQuestion {
 }
 
 /**
- * 待复习笔记
+ * 待复习笔记（与后端 ReviewNoteDto 字段完全对齐）
  */
 export interface ReviewNote {
     noteId: number
-    noteTitle: string
+    title: string       // 后端字段名是 title 而非 noteTitle
+    summary?: string
     nextReviewTime: string
-    intervalDays: number
     repetitionCount: number
-    easinessFactor: number
     questions: ReviewQuestion[]
 }
 

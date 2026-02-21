@@ -84,7 +84,7 @@ const handleGrade = async (quality: number) => {
       message.success('本次复习完成！')
       emit('finish')
     }
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '提交失败，请重试')
   } finally {
     submitting.value = false
@@ -121,7 +121,8 @@ const handleGrade = async (quality: number) => {
         <!-- Note Title -->
         <div class="mb-6 pb-4 border-b border-gray-200/50">
           <div class="text-xs text-indigo-500 uppercase tracking-widest font-bold mb-2 opacity-70">笔记</div>
-          <div class="text-xl font-semibold text-gray-800">{{ currentNote?.noteTitle }}</div>
+          <div class="text-xl font-semibold text-gray-800">{{ currentNote?.title }}</div>
+          <div v-if="currentNote?.summary" class="text-sm text-gray-500 mt-1 line-clamp-2">{{ currentNote.summary }}</div>
         </div>
 
         <!-- Question -->
