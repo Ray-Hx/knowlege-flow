@@ -116,27 +116,27 @@
           </div>
         </div>
         
-        <!-- 加载更多 -->
-        <div v-if="notes.length > 0" class="flex flex-col md:flex-row items-center justify-center gap-4 mt-6 pb-2 shrink-0">
+        <!-- 分页控制 -->
+        <div v-if="totalItems > 0" class="flex flex-col md:flex-row items-center justify-center gap-4 mt-6 pb-2 shrink-0">
            <n-pagination
-             v-model:page="page"
-             v-model:page-size="size"
+             :page="page"
+             :page-size="size"
              :item-count="totalItems"
              :page-sizes="[12, 24, 36, 48]"
              show-size-picker
              show-quick-jumper
-             @update:page="handlePageChange"
-             @update:page-size="handlePageSizeChange"
+             :on-update:page="onPageChange"
+             :on-update:page-size="onPageSizeChange"
            />
            <div class="flex items-center gap-2 text-sm text-gray-500">
              <span>自定义每页</span>
              <n-input-number 
-                v-model:value="customSize" 
+                :value="size"
                 :min="1" 
                 :max="100" 
                 size="small" 
                 class="w-24"
-                @update:value="applyCustomSize"
+                @update:value="onCustomSizeChange"
               >
                 <template #suffix>
                   条
@@ -195,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { NInput, NIcon, NAvatar, NSpin, NPagination, useMessage, NButton, NTabs, NTabPane, NInputNumber } from 'naive-ui'
 import { getCommunityFeed, getRanking, getFollowingFeed } from '@/api/community'
@@ -216,8 +216,7 @@ const notes = ref<Note[]>([])
 const keyword = ref('')
 const page = ref(1)
 const size = ref(12)
-const customSize = ref(12) // 自定义输入框关联值
-const totalItems = ref(0) // 总记录数，用于 n-pagination 的 item-count
+const totalItems = ref(0)
 
 const rankingLoading = ref(false)
 const rankingList = ref<Note[]>([])
@@ -228,15 +227,15 @@ const formatTime = (time: string) => {
   return dayjs(time).fromNow()
 }
 
-// 获取笔记
+// 获取笔记（核心数据拉取）
 const fetchNotes = async () => {
   try {
     loading.value = true
-    let res;
+    let res
     if (activeTab.value === 'following') {
-       res = await getFollowingFeed(page.value, size.value)
+      res = await getFollowingFeed(page.value, size.value)
     } else {
-       res = await getCommunityFeed(keyword.value, page.value, size.value)
+      res = await getCommunityFeed(keyword.value, page.value, size.value)
     }
     notes.value = res.records
     totalItems.value = res.total
@@ -252,30 +251,31 @@ const fetchNotes = async () => {
 const handleTabChange = (val: string) => {
   activeTab.value = val
   page.value = 1
-  if (val === 'following') keyword.value = '' // 清空搜索以便于只看关注
+  if (val === 'following') keyword.value = ''
   fetchNotes()
 }
 
-// 处理翻页
-const handlePageChange = (p: number) => {
+// ===== 分页事件处理（不使用v-model，全部手动控制） =====
+
+// 翻页
+const onPageChange = (p: number) => {
   page.value = p
-  fetchNotes()
+  nextTick(() => fetchNotes())
 }
 
-// 处理每页条数改变 (通过下拉或者输入框联动)
-const handlePageSizeChange = (s: number) => {
+// 下拉切换每页条数
+const onPageSizeChange = (s: number) => {
   size.value = s
-  customSize.value = s // 同步给自定义输入框
-  page.value = 1 // 重置到第一页
-  fetchNotes()
+  page.value = 1
+  nextTick(() => fetchNotes())
 }
 
-// 专门处理自定义输入框改变
-const applyCustomSize = (s: number | null) => {
-  if (s && s > 0) {
-    size.value = s // 同步给底部分页控件，使其发出请求并能对应上数据
+// 自定义输入框改变每页条数
+const onCustomSizeChange = (s: number | null) => {
+  if (s && s >= 1 && s <= 100) {
+    size.value = s
     page.value = 1
-    fetchNotes()
+    nextTick(() => fetchNotes())
   }
 }
 
@@ -293,7 +293,7 @@ const fetchRanking = async () => {
   }
 }
 
-// 搜索 (Debounce logic implied by enter key or add debounce if watching)
+// 搜索
 const handleSearch = () => {
   page.value = 1
   fetchNotes()
