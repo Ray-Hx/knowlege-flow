@@ -121,9 +121,10 @@
            <n-pagination
              v-model:page="page"
              v-model:page-size="size"
-             :page-count="totalPages"
+             :item-count="totalItems"
              :page-sizes="[12, 24, 36, 48]"
              show-size-picker
+             show-quick-jumper
              @update:page="handlePageChange"
              @update:page-size="handlePageSizeChange"
            />
@@ -214,9 +215,9 @@ const loading = ref(false)
 const notes = ref<Note[]>([])
 const keyword = ref('')
 const page = ref(1)
-const size = ref(12) // 从 9 加到 12 填补右侧被推后的下巴
+const size = ref(12)
 const customSize = ref(12) // 自定义输入框关联值
-const totalPages = ref(1)
+const totalItems = ref(0) // 总记录数，用于 n-pagination 的 item-count
 
 const rankingLoading = ref(false)
 const rankingList = ref<Note[]>([])
@@ -238,7 +239,7 @@ const fetchNotes = async () => {
        res = await getCommunityFeed(keyword.value, page.value, size.value)
     }
     notes.value = res.records
-    totalPages.value = res.pages
+    totalItems.value = res.total
   } catch (error: any) {
     message.error(error.message || '获取社区动态失败，请检查是否已登录')
     console.error(error)
