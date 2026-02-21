@@ -179,10 +179,17 @@ const aiOptions = [
     { label: '📝 扩写', key: 'expand' }
 ]
 
+const currentSelection = ref('')
+
 const handleAiAction = async (key: string) => {
     if (!vditor.value) return
     
-    const selection = vditor.value.getSelection()
+    // 如果直接获取为空（可能因为点击外部按钮丢失了焦点），则尝试使用我们之前缓存的选中文本
+    let selection = vditor.value.getSelection()
+    if (!selection || selection.trim() === '') {
+        selection = currentSelection.value
+    }
+    
     if (!selection || selection.trim() === '') {
         message.warning('请先选中要处理的文本')
         return
@@ -254,6 +261,9 @@ const initVditor = () => {
             'fullscreen',
             'edit-mode',
         ],
+        select: (value: string) => {
+            currentSelection.value = value
+        },
         hint: {
             // 自定义自动补全
             extend: [
