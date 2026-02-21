@@ -367,7 +367,7 @@ const initVditor = () => {
                 })
                 // 渲染 [[笔记标题]] 为笔记跳转链接
                 html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
-                    return `<a class="note-ref-badge" href="/#/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                    return `<a class="note-ref-badge" href="/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
                 })
                 return html
             }
@@ -533,75 +533,4 @@ onUnmounted(() => {
 }
 </style>
 
-<!-- 全局样式用于 Vditor 内部渲染 -->
-<style>
-.article-ref-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 13px;
-    margin: 0 2px;
-    cursor: pointer;
-}
-
-.article-ref-badge:hover {
-    opacity: 0.9;
-    transform: scale(1.02);
-}
-
-.note-ref-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    color: white;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 13px;
-    margin: 0 2px;
-    cursor: pointer;
-}
-
-.note-ref-badge:hover {
-    opacity: 0.9;
-    transform: scale(1.02);
-}
-
-/* 笔记自动补全提示样式 */
-.hint-note {
-    display: block;
-    padding: 6px 12px;
-    color: #333;
-    font-size: 14px;
-}
-
-.hint-note:hover {
-    background-color: #f0f7ff;
-}
-
-/* AI 补充内容短暂高亮动画 */
-@keyframes aiHighlightFade {
-    0% {
-        background-color: rgba(99, 102, 241, 0.3); /* indigo-500 低透明度 */
-        color: #4f46e5;
-        box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
-    }
-    80% {
-        background-color: rgba(99, 102, 241, 0.1);
-        color: inherit;
-        box-shadow: 0 0 2px rgba(99, 102, 241, 0.1);
-    }
-    100% {
-        background-color: transparent;
-        color: inherit;
-        box-shadow: none;
-    }
-}
-
-.ai-highlight-text {
-    animation: aiHighlightFade 3s ease-in-out forwards;
-    border-radius: 4px;
-    padding: 2px 4px;
-    transition: all 0.3s;
-}
 </style>

@@ -373,10 +373,10 @@ const loadNote = async () => {
                  transform(html: string) {
                     html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_, id, title) => {
                         const displayTitle = title ? title : `文章引用 #${id}`
-                        return `<span class="article-ref-badge" style="cursor:pointer" onclick="window.open('/#/content?keyword=' + encodeURIComponent('${title || ''}'), '_blank')">📰 ${displayTitle}</span>`
+                        return `<span class="article-ref-badge" style="cursor:pointer" onclick="window.open('/content', '_blank')">📰 ${displayTitle}</span>`
                     })
                     html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
-                        return `<a class="note-ref-badge" href="/#/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
+                        return `<a class="note-ref-badge" href="/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
                     })
                     return html
                 }

@@ -148,3 +148,70 @@ body::before {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(107, 114, 128, 0.8);
 }
+
+/* ==================================================== 
+   Content Reference Badges (Global for Markdown) 
+   ==================================================== */
+.article-ref-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white !important;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin: 0 2px;
+  cursor: pointer;
+  text-decoration: none !important;
+}
+
+.article-ref-badge:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+  color: white !important;
+}
+
+.note-ref-badge {
+  display: inline-block;
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white !important;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  margin: 0 2px;
+  cursor: pointer;
+  text-decoration: none !important;
+}
+
+.note-ref-badge:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+  color: white !important;
+}
+
+/* AI 补充内容短暂高亮动画 */
+@keyframes aiHighlightFade {
+  0% {
+    background-color: rgba(99, 102, 241, 0.3);
+    color: #4f46e5;
+    box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+  }
+
+  80% {
+    background-color: rgba(99, 102, 241, 0.1);
+    color: inherit;
+    box-shadow: 0 0 2px rgba(99, 102, 241, 0.1);
+  }
+
+  100% {
+    background-color: transparent;
+    color: inherit;
+    box-shadow: none;
+  }
+}
+
+.ai-highlight-text {
+  animation: aiHighlightFade 3s ease-in-out forwards;
+  border-radius: 4px;
+  padding: 2px 4px;
+  transition: all 0.3s;
+}
