@@ -35,15 +35,18 @@ const startReview = async () => {
     } else {
       message.info('没有需要复习的笔记')
     }
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '加载笔记失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleReviewFinish = () => {
+const handleReviewFinish = (stats?: { remembered: number; forgot: number }) => {
   isReviewing.value = false
+  if (stats) {
+    message.success(`复习完成！记住 ${stats.remembered} 篇，需加强 ${stats.forgot} 篇`)
+  }
   fetchStats()
 }
 
@@ -53,7 +56,7 @@ const initQueue = async () => {
     await spacedApi.initReviewQueue()
     message.success('复习队列已初始化')
     fetchStats()
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '初始化失败')
   } finally {
     initializing.value = false
