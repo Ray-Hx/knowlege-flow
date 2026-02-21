@@ -134,7 +134,7 @@ const searchArticles = async () => {
             keyword: articleSearchKeyword.value || undefined
         })
         articleSearchResults.value = res.records || []
-    } catch (e) {
+    } catch (e: any) {
         console.error(e)
     } finally {
         articleSearching.value = false
@@ -209,9 +209,23 @@ const handleAiAction = async (key: string) => {
         }
         
         if (result) {
-            // 替换选中的文本
-            vditor.value.insertValue(result, true)
+            // 在光标/选区处追加（不替换原来的文本）
+            // 使用特定的 class 来实现短暂的 CSS 高亮动画
+            const insertStr = `\n\n<mark class="ai-highlight-text">🤖 **AI 补充：**</mark>\n${result}\n\n`
+            vditor.value.insertValue(insertStr, false)
             message.success('AI 处理完成')
+            
+            // 可选：如果不希望 <mark> 标签永久留在 Markdown 源码中，
+            // 可以在动画结束后（比如 3 秒）将 <mark> 标签移除，只保留纯文本
+            setTimeout(() => {
+                if (vditor.value) {
+                    let content = vditor.value.getValue()
+                    if (content.includes('<mark class="ai-highlight-text">')) {
+                        content = content.replace(/<mark class="ai-highlight-text">(.*?)<\/mark>/g, '$1')
+                        vditor.value.setValue(content)
+                    }
+                }
+            }, 3000)
         }
     } catch (e: any) {
         message.error(e.message || 'AI 处理失败')
@@ -323,7 +337,7 @@ const loadNote = async () => {
                 vditor.value.setValue(data.contentMd)
             }
         }
-    } catch (error) {
+    } catch (error: any) {
         message.error(error.message || '加载笔记失败')
     }
 }
@@ -360,7 +374,7 @@ const saveNote = async () => {
                 router.replace(`/notes/${data.id}`)
             }
         }
-    } catch (error) {
+    } catch (error: any) {
         message.error(error.message || '保存失败')
     } finally {
         saving.value = false
@@ -371,7 +385,7 @@ onMounted(async () => {
     // 加载文件夹列表
     try {
         folders.value = await noteApi.getFolders()
-    } catch (e) {
+    } catch (e: any) {
         console.error('Failed to load folders', e)
     }
     
@@ -508,5 +522,31 @@ onUnmounted(() => {
 
 .hint-note:hover {
     background-color: #f0f7ff;
+}
+
+/* AI 补充内容短暂高亮动画 */
+@keyframes aiHighlightFade {
+    0% {
+        background-color: rgba(99, 102, 241, 0.3); /* indigo-500 低透明度 */
+        color: #4f46e5;
+        box-shadow: 0 0 8px rgba(99, 102, 241, 0.4);
+    }
+    80% {
+        background-color: rgba(99, 102, 241, 0.1);
+        color: inherit;
+        box-shadow: 0 0 2px rgba(99, 102, 241, 0.1);
+    }
+    100% {
+        background-color: transparent;
+        color: inherit;
+        box-shadow: none;
+    }
+}
+
+.ai-highlight-text {
+    animation: aiHighlightFade 3s ease-in-out forwards;
+    border-radius: 4px;
+    padding: 2px 4px;
+    transition: all 0.3s;
 }
 </style>
