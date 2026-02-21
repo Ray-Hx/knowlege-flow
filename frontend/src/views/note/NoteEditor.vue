@@ -17,8 +17,8 @@
                     style="width: 160px"
                     size="medium"
                 />
-                <n-button @click="openArticleModal" title="插入订阅文章">
-                    📰 插入文章
+                <n-button @click="openInsertModal" title="插入内容">
+                    🔗 插入引用
                 </n-button>
                 <n-dropdown :options="aiOptions" @select="handleAiAction">
                     <n-button :loading="aiProcessing">
@@ -43,36 +43,61 @@
             <div id="vditor" class="absolute inset-0 border border-gray-100 rounded"></div>
         </div>
 
-        <!-- 文章搜索弹窗 -->
-        <n-modal v-model:show="showArticleModal" preset="card" title="选择要引用的文章" style="width: 600px; max-width: 90vw;">
+        <!-- 多源引用内容搜索弹窗 -->
+        <n-modal v-model:show="showInsertModal" preset="card" title="选择要引用的内容" style="width: 600px; max-width: 90vw;">
             <div class="space-y-4">
                 <n-input 
-                    v-model:value="articleSearchKeyword" 
-                    placeholder="搜索文章标题..." 
+                    v-model:value="searchKeyword" 
+                    placeholder="输入关键词搜索..." 
                     clearable
                 />
-                <n-spin :show="articleSearching">
-                    <div class="article-list">
-                        <n-empty v-if="articleSearchResults.length === 0" description="暂无文章，请先在内容中心订阅" />
-                        <div v-else class="article-items">
-                            <div 
-                                v-for="article in articleSearchResults" 
-                                :key="article.id"
-                                class="article-item"
-                                @click="insertArticle(article)"
-                            >
-                                <div class="article-title">{{ article.title }}</div>
-                                <div class="article-meta">
-                                    <span v-if="article.sourceName">来源: {{ article.sourceName }}</span>
-                                    <span v-if="article.publishTime">{{ article.publishTime }}</span>
-                                </div>
-                                <div class="article-summary" v-if="article.summary">
-                                    {{ article.summary }}
+                <n-tabs type="segment" v-model:value="insertTab" @update:value="performSearch">
+                    <n-tab-pane name="article" tab="📰 订阅文章">
+                        <n-spin :show="searching">
+                            <div class="article-list custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
+                                <n-empty v-if="articleResults.length === 0" description="暂无相关文章" />
+                                <div v-else class="article-items">
+                                    <div v-for="item in articleResults" :key="item.id" class="article-item" @click="insertFeature('article', item)">
+                                        <div class="article-title">{{ item.title }}</div>
+                                        <div class="article-meta mt-1">
+                                            <span v-if="item.sourceName">来源: {{ item.sourceName }}</span>
+                                            <span v-if="item.publishTime">{{ item.publishTime }}</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-                </n-spin>
+                        </n-spin>
+                    </n-tab-pane>
+                    <n-tab-pane name="my_note" tab="📝 我的笔记">
+                        <n-spin :show="searching">
+                            <div class="article-list custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
+                                <n-empty v-if="myNoteResults.length === 0" description="暂无相关笔记" />
+                                <div v-else class="article-items">
+                                    <div v-for="item in myNoteResults" :key="item.id" class="article-item" @click="insertFeature('my_note', item)">
+                                        <div class="article-title">{{ item.title }}</div>
+                                        <div class="article-meta mt-1 text-gray-500 text-xs truncate">{{ item.summary || '无摘要' }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </n-spin>
+                    </n-tab-pane>
+                    <n-tab-pane name="community_note" tab="🌐 社区笔记">
+                        <n-spin :show="searching">
+                            <div class="article-list custom-scrollbar" style="max-height: 400px; overflow-y: auto;">
+                                <n-empty v-if="communityResults.length === 0" description="暂无相关社区笔记" />
+                                <div v-else class="article-items">
+                                    <div v-for="item in communityResults" :key="item.id" class="article-item" @click="insertFeature('community_note', item)">
+                                        <div class="article-title">{{ item.title }}</div>
+                                        <div class="article-meta mt-1 flex gap-3 text-xs text-indigo-500">
+                                            <span v-if="item.authorName">👤 {{ item.authorName }}</span>
+                                            <span>❤️ {{ item.likeCount || 0 }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </n-spin>
+                    </n-tab-pane>
+                </n-tabs>
             </div>
         </n-modal>
 
@@ -90,8 +115,9 @@ import { useMessage, NModal, NEmpty, NSpin, NSelect } from 'naive-ui'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import NoteMindmap from '@/components/NoteMindmap.vue'
-import { noteApi, NoteFolder } from '@/api/note'
+import { noteApi, NoteFolder, Note } from '@/api/note'
 import { contentApi, ContentItem } from '@/api/content'
+import { getCommunityFeed } from '@/api/community'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,11 +138,15 @@ const folderOptions = computed(() => [
     ...folders.value.map(f => ({ label: f.name, value: f.id }))
 ])
 
-// 文章搜索弹窗
-const showArticleModal = ref(false)
-const articleSearchKeyword = ref('')
-const articleSearchResults = ref<ContentItem[]>([])
-const articleSearching = ref(false)
+// 引用插入弹窗的整体状态
+const showInsertModal = ref(false)
+const insertTab = ref('article')
+const searchKeyword = ref('')
+const searching = ref(false)
+
+const articleResults = ref<ContentItem[]>([])
+const myNoteResults = ref<Note[]>([])
+const communityResults = ref<Note[]>([])
 
 // 思维导图
 const showMindmap = ref(false)
@@ -124,46 +154,66 @@ const getCurrentMarkdown = () => {
     return vditor.value?.getValue() || ''
 }
 
-// 搜索文章
-const searchArticles = async () => {
-    articleSearching.value = true
+// 执行搜索
+const performSearch = async () => {
+    searching.value = true
     try {
-        const res = await contentApi.listItems({
-            page: 1,
-            size: 20,
-            keyword: articleSearchKeyword.value || undefined
-        })
-        articleSearchResults.value = res.records || []
+        if (insertTab.value === 'article') {
+            const res = await contentApi.listItems({
+                page: 1,
+                size: 20,
+                keyword: searchKeyword.value || undefined
+            })
+            articleResults.value = res.records || []
+        } else if (insertTab.value === 'my_note') {
+            const res = await noteApi.getNotes({
+                page: 1,
+                size: 20,
+                keyword: searchKeyword.value || undefined
+            })
+            myNoteResults.value = res.records || []
+        } else if (insertTab.value === 'community_note') {
+            const res = await getCommunityFeed(searchKeyword.value || '', 1, 20)
+            communityResults.value = res.records || []
+        }
     } catch (e: any) {
         console.error(e)
     } finally {
-        articleSearching.value = false
+        searching.value = false
     }
 }
 
-// 打开文章搜索弹窗
-const openArticleModal = () => {
-    showArticleModal.value = true
-    articleSearchKeyword.value = ''
-    searchArticles()
+// 打开弹窗
+const openInsertModal = () => {
+    showInsertModal.value = true
+    searchKeyword.value = ''
+    performSearch()
 }
 
-// 插入文章引用
-const insertArticle = (article: ContentItem) => {
-    const ref = `[[!article:${article.id}]]`
-    if (vditor.value) {
-        vditor.value.insertValue(ref)
+// 统一插入
+const insertFeature = (type: string, item: any) => {
+    let insertStr = ''
+    if (type === 'article') {
+        insertStr = `[[!article:${item.id}]]`
+    } else if (type === 'my_note') {
+        insertStr = `[[${item.title}]]`
+    } else if (type === 'community_note') {
+        insertStr = `[${item.title}](/community/note/${item.id})`
     }
-    showArticleModal.value = false
-    message.success(`已插入: ${article.title}`)
+    
+    if (vditor.value && insertStr) {
+        vditor.value.insertValue(insertStr)
+        message.success(`已插入引用: ${item.title}`)
+    }
+    showInsertModal.value = false
 }
 
 // 搜索防抖
 let searchTimer: any = null
-watch(articleSearchKeyword, () => {
+watch(searchKeyword, () => {
     clearTimeout(searchTimer)
     searchTimer = setTimeout(() => {
-        searchArticles()
+        performSearch()
     }, 300)
 })
 
