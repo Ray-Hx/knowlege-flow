@@ -117,7 +117,7 @@
         </div>
         
         <!-- 加载更多 -->
-        <div v-if="notes.length > 0" class="flex justify-center mt-6 pb-2 shrink-0">
+        <div v-if="notes.length > 0" class="flex flex-col md:flex-row items-center justify-center gap-4 mt-6 pb-2 shrink-0">
            <n-pagination
              v-model:page="page"
              v-model:page-size="size"
@@ -127,6 +127,21 @@
              @update:page="handlePageChange"
              @update:page-size="handlePageSizeChange"
            />
+           <div class="flex items-center gap-2 text-sm text-gray-500">
+             <span>自定义每页</span>
+             <n-input-number 
+                v-model:value="customSize" 
+                :min="1" 
+                :max="100" 
+                size="small" 
+                class="w-24"
+                @update:value="applyCustomSize"
+              >
+                <template #suffix>
+                  条
+                </template>
+             </n-input-number>
+           </div>
         </div>
       </div>
 
@@ -181,7 +196,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { NInput, NIcon, NAvatar, NSpin, NPagination, useMessage, NButton, NTabs, NTabPane } from 'naive-ui'
+import { NInput, NIcon, NAvatar, NSpin, NPagination, useMessage, NButton, NTabs, NTabPane, NInputNumber } from 'naive-ui'
 import { getCommunityFeed, getRanking, getFollowingFeed } from '@/api/community'
 import type { Note } from '@/api/note'
 import dayjs from 'dayjs'
@@ -200,6 +215,7 @@ const notes = ref<Note[]>([])
 const keyword = ref('')
 const page = ref(1)
 const size = ref(12) // 从 9 加到 12 填补右侧被推后的下巴
+const customSize = ref(12) // 自定义输入框关联值
 const totalPages = ref(1)
 
 const rankingLoading = ref(false)
@@ -223,7 +239,7 @@ const fetchNotes = async () => {
     }
     notes.value = res.records
     totalPages.value = res.pages
-  } catch (error) {
+  } catch (error: any) {
     message.error(error.message || '获取社区动态失败，请检查是否已登录')
     console.error(error)
   } finally {
@@ -245,11 +261,21 @@ const handlePageChange = (p: number) => {
   fetchNotes()
 }
 
-// 处理每页条数改变
+// 处理每页条数改变 (通过下拉或者输入框联动)
 const handlePageSizeChange = (s: number) => {
   size.value = s
+  customSize.value = s // 同步给自定义输入框
   page.value = 1 // 重置到第一页
   fetchNotes()
+}
+
+// 专门处理自定义输入框改变
+const applyCustomSize = (s: number | null) => {
+  if (s && s > 0) {
+    size.value = s // 同步给底部分页控件，使其发出请求并能对应上数据
+    page.value = 1
+    fetchNotes()
+  }
 }
 
 // 获取热议榜
@@ -258,7 +284,7 @@ const fetchRanking = async () => {
     rankingLoading.value = true
     const res = await getRanking(10)
     rankingList.value = res
-  } catch (error) {
+  } catch (error: any) {
     message.error(error.message || '获取排行榜失败')
     console.error(error)
   } finally {
