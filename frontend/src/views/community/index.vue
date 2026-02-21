@@ -44,10 +44,10 @@
     </div>
 
     <!-- 主体区域：左侧内容 + 右侧排行榜 -->
-    <div class="flex-1 flex gap-6 overflow-hidden">
+    <div class="flex-1 flex gap-6 min-h-0">
       
-      <!-- 左瀑布流 -->
-      <div class="flex-1 flex flex-col overflow-hidden bg-white/50 rounded-2xl p-2 border border-gray-100 shadow-sm backdrop-blur-sm">
+      <!-- 左瓀布流 -->
+      <div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar bg-white/50 rounded-2xl p-2 border border-gray-100 shadow-sm backdrop-blur-sm">
         
         <n-tabs v-model:value="activeTab" type="line" animated class="px-2" @update:value="handleTabChange">
           <n-tab-pane name="all" tab="🌍 推荐广场">
@@ -58,16 +58,16 @@
           </n-tab-pane>
         </n-tabs>
 
-        <div v-if="loading && !notes.length" class="flex justify-center py-20 flex-1">
+        <div v-if="loading && !notes.length" class="flex justify-center py-20">
           <n-spin size="large" />
         </div>
 
-        <div v-else-if="!notes.length" class="flex flex-col items-center justify-center py-20 text-gray-400 flex-1">
+        <div v-else-if="!notes.length" class="flex flex-col items-center justify-center py-20 text-gray-400">
           <div class="text-6xl mb-4">📭</div>
           <p class="text-lg">暂无相关的公开笔记，等你来探索！</p>
         </div>
 
-        <div v-else class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-max overflow-y-auto pb-8 pt-4 custom-scrollbar pr-2 mt-2 px-2">
+        <div ref="gridRef" v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6 auto-rows-max pb-4 pt-4 mt-2 px-2">
           <div
             v-for="note in notes"
             :key="note.id"
@@ -147,7 +147,7 @@
       </div>
 
       <!-- 右侧社区热榜 -->
-      <div class="w-[320px] flex-shrink-0 hidden lg:flex flex-col bg-white rounded-2xl border border-gray-100 p-5 shadow-sm overflow-hidden h-fit max-h-full">
+      <div class="w-[320px] flex-shrink-0 hidden lg:flex flex-col bg-white rounded-2xl border border-gray-100 p-5 shadow-sm overflow-y-auto custom-scrollbar h-[calc(100vh-200px)] max-h-full">
         <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
           <span class="text-orange-500">🔥</span> 社区热议榜
         </h2>
@@ -217,6 +217,7 @@ const keyword = ref('')
 const page = ref(1)
 const size = ref(12)
 const totalItems = ref(0)
+const gridRef = ref<HTMLElement | null>(null)  // 用于翻页后滚动到顶部
 
 const rankingLoading = ref(false)
 const rankingList = ref<Note[]>([])
@@ -260,7 +261,12 @@ const handleTabChange = (val: string) => {
 // 翻页
 const onPageChange = (p: number) => {
   page.value = p
-  nextTick(() => fetchNotes())
+  nextTick(() => {
+    fetchNotes()
+    // 翻页后滚动回顶部
+    const el = gridRef.value
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 // 下拉切换每页条数
