@@ -122,7 +122,7 @@
              v-model:page="page"
              :page-count="totalPages"
              :page-size="size"
-             @update:page="fetchNotes"
+             @update:page="handlePageChange"
            />
         </div>
       </div>
@@ -233,6 +233,12 @@ const handleTabChange = (val: string) => {
   activeTab.value = val
   page.value = 1
   if (val === 'following') keyword.value = '' // 清空搜索以便于只看关注
+  fetchNotes()
+}
+
+// 处理翻页
+const handlePageChange = (p: number) => {
+  page.value = p
   fetchNotes()
 }
 
