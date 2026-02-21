@@ -138,24 +138,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Info Section -->
-      <div class="glass-card p-6">
-        <h3 class="font-bold text-gray-700 text-lg mb-4">如何使用</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-gray-600 text-sm">
-          <div class="p-4 bg-indigo-50 rounded-lg">
-            <div class="font-bold text-indigo-600 mb-2">1. 自动加入</div>
-            <p>所有笔记自动加入复习队列，无需手动创建闪卡</p>
-          </div>
-          <div class="p-4 bg-purple-50 rounded-lg">
-            <div class="font-bold text-purple-600 mb-2">2. AI 生成问题</div>
-            <p>AI 根据笔记内容自动生成复习问题并缓存</p>
-          </div>
-          <div class="p-4 bg-emerald-50 rounded-lg">
-            <div class="font-bold text-emerald-600 mb-2">3. 间隔复习</div>
-            <p>基于 SM-2 算法智能安排复习时间</p>
-          </div>
-        </div>
-      </div>
+
     </div>
   </div>
 </template>
