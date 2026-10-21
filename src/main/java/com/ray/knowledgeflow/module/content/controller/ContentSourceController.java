@@ -5,6 +5,10 @@ import com.ray.knowledgeflow.module.content.dto.ContentSourceDto;
 import com.ray.knowledgeflow.module.content.service.IContentSourceService;
 import com.ray.knowledgeflow.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -18,6 +22,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/content/sources")
 @RequiredArgsConstructor
+@Validated
 public class ContentSourceController {
 
     private final IContentSourceService contentSourceService;
@@ -35,7 +40,7 @@ public class ContentSourceController {
      * 添加内容源
      */
     @PostMapping
-    public Result<ContentSourceDto> addSource(@RequestBody ContentSourceDto dto) {
+    public Result<ContentSourceDto> addSource(@Valid @RequestBody ContentSourceDto dto) {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.success(contentSourceService.addSource(userId, dto));
     }
@@ -63,7 +68,8 @@ public class ContentSourceController {
      * 启用/禁用内容源
      */
     @PutMapping("/{id}/status")
-    public Result<Void> toggleStatus(@PathVariable Long id, @RequestParam Integer status) {
+    public Result<Void> toggleStatus(@PathVariable Long id,
+            @RequestParam @Min(0) @Max(1) Integer status) {
         Long userId = SecurityUtils.getCurrentUserId();
         contentSourceService.toggleStatus(userId, id, status);
         return Result.success();

@@ -6,8 +6,22 @@
 
 set -e
 
+# 启动哪一组服务，默认全套。可选: core / rag / search / graph / storage / full
+# 用法: ./start.sh          全套
+#       ./start.sh rag      核心 + Qdrant
+#       ./start.sh core     仅核心 (MySQL + Redis + RabbitMQ)
+PROFILE="${1:-full}"
+
+if [ "$PROFILE" = "core" ]; then
+    COMPOSE_ARGS=""
+else
+    COMPOSE_ARGS="--profile $PROFILE"
+fi
+
 echo "=========================================="
 echo "  KnowledgeFlow 基础设施启动脚本"
+echo "=========================================="
+echo "  启动分组: $PROFILE"
 echo "=========================================="
 echo ""
 
@@ -35,7 +49,7 @@ fi
 
 # 停止并删除旧容器
 printf "${YELLOW}🔄 停止旧容器...${NC}\n"
-docker compose down 2>/dev/null || true
+docker compose $COMPOSE_ARGS down 2>/dev/null || true
 
 # 拉取最新镜像
 echo ""
@@ -45,7 +59,7 @@ printf "${YELLOW}📥 拉取 Docker 镜像...${NC}\n"
 # 启动服务
 echo ""
 printf "${YELLOW}🚀 启动服务...${NC}\n"
-docker compose up -d
+docker compose $COMPOSE_ARGS up -d
 
 # 等待服务启动
 echo ""

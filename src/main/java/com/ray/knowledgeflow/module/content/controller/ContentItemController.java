@@ -6,6 +6,10 @@ import com.ray.knowledgeflow.module.content.dto.ContentItemDto;
 import com.ray.knowledgeflow.module.content.service.IContentItemService;
 import com.ray.knowledgeflow.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -17,22 +21,21 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/content/items")
 @RequiredArgsConstructor
+@Validated
 public class ContentItemController {
 
     private final IContentItemService contentItemService;
 
-    /**
-     * 分页查询内容列表
-     */
     @GetMapping
     public Result<IPage<ContentItemDto>> listItems(
             @RequestParam(required = false) Integer status,
             @RequestParam(required = false) Long sourceId,
+            @RequestParam(required = false) Boolean isUpload,
             @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size) {
         Long userId = SecurityUtils.getCurrentUserId();
-        return Result.success(contentItemService.pageByUserId(userId, status, sourceId, keyword, page, size));
+        return Result.success(contentItemService.pageByUserId(userId, status, sourceId, isUpload, keyword, page, size));
     }
 
     /**
@@ -48,7 +51,7 @@ public class ContentItemController {
      * 更新内容状态
      */
     @PutMapping("/{id}/status")
-    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
+    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam @Min(0) @Max(4) Integer status) {
         Long userId = SecurityUtils.getCurrentUserId();
         contentItemService.updateStatus(userId, id, status);
         return Result.success();
@@ -58,7 +61,8 @@ public class ContentItemController {
      * 批量更新状态
      */
     @PutMapping("/batch/status")
-    public Result<Void> batchUpdateStatus(@RequestBody Long[] ids, @RequestParam Integer status) {
+    public Result<Void> batchUpdateStatus(@RequestBody @Size(min = 1, max = 500) Long[] ids,
+            @RequestParam @Min(0) @Max(4) Integer status) {
         Long userId = SecurityUtils.getCurrentUserId();
         contentItemService.batchUpdateStatus(userId, ids, status);
         return Result.success();

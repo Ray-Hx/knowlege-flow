@@ -37,7 +37,7 @@ export function getRanking(limit: number = 10) {
 
 // 获取全网动态知识图谱 (银河)
 export function getGlobalGraph(limit: number = 300) {
-    return request.get<any, any[]>('/community/graph/global', {
+    return request.get<any, any[]>('/community/galaxy', {
         params: { limit }
     })
 }
@@ -91,8 +91,11 @@ export function deleteComment(noteId: number, commentId: number) {
 export interface UserPublicProfile {
     id: number
     username: string
+    email: string
     avatar: string | null
     bio: string | null
+    githubId: string | null
+    learningGoals: string | null
     publicNoteCount: number
     totalViews: number
     totalLikes: number

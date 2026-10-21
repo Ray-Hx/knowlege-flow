@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ray.knowledgeflow.common.exception.BusinessException;
 import com.ray.knowledgeflow.module.user.entity.UserRelation;
+import com.ray.knowledgeflow.module.user.mapper.UserMapper;
 import com.ray.knowledgeflow.module.user.mapper.UserRelationMapper;
 import com.ray.knowledgeflow.module.user.service.IUserRelationService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -17,13 +19,20 @@ import java.time.LocalDateTime;
  * @since 2024-01-16
  */
 @Service
+@RequiredArgsConstructor
 public class UserRelationServiceImpl extends ServiceImpl<UserRelationMapper, UserRelation>
         implements IUserRelationService {
+
+    private final UserMapper userMapper;
 
     @Override
     public void follow(Long followerId, Long followingId) {
         if (followerId.equals(followingId)) {
             throw new BusinessException(400, "不能关注自己");
+        }
+
+        if (userMapper.selectById(followingId) == null) {
+            throw new BusinessException(404, "用户不存在");
         }
 
         if (isFollowing(followerId, followingId)) {

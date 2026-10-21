@@ -5,10 +5,12 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -29,9 +31,23 @@ public class GlobalExceptionHandler {
      * 处理业务异常
      */
     @ExceptionHandler(BusinessException.class)
-    public Result<String> handleBusinessException(BusinessException e) {
+    public ResponseEntity<Result<String>> handleBusinessException(BusinessException e) {
         log.error("业务异常: code={}, message={}", e.getCode(), e.getMessage());
-        return Result.fail(e.getCode(), e.getMessage());
+        HttpStatus status = HttpStatus.resolve(e.getCode());
+        if (status == null || !status.isError()) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return ResponseEntity.status(status).body(Result.fail(e.getCode(), e.getMessage()));
+    }
+
+    /**
+     * 处理认证异常 (Spring Security)
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<String> handleAuthenticationException(AuthenticationException e) {
+        log.error("认证异常: {}", e.getMessage());
+        return Result.fail(401, "用户名或密码错误");
     }
 
     /**
@@ -86,7 +102,6 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<String> handleException(Exception e) {
-        e.printStackTrace(); // Print to stderr for immediate debugging
         log.error("系统异常", e);
         return Result.fail(500, "系统繁忙，请稍后重试");
     }

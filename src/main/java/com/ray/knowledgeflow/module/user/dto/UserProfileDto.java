@@ -12,6 +12,11 @@ import lombok.Data;
 public class UserProfileDto {
 
     /**
+     * 用户 ID
+     */
+    private Long id;
+
+    /**
      * 用户名 (只读)
      */
     private String username;

@@ -8,11 +8,13 @@ import com.ray.knowledgeflow.module.note.mapper.NoteFolderMapper;
 import com.ray.knowledgeflow.module.search.repository.ContentRepository;
 import com.ray.knowledgeflow.module.search.repository.NoteRepository;
 import com.ray.knowledgeflow.module.search.service.EmbeddingService;
+import com.ray.knowledgeflow.module.ai.service.Reranker;
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Points;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -21,9 +23,13 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
+import org.mockito.ArgumentCaptor;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.common.util.concurrent.Futures;
@@ -45,14 +51,19 @@ class SearchServiceSemanticTest {
         private QdrantClient qdrantClient;
         @Mock
         private ContentItemMapper contentItemMapper;
+        @Mock
+        private Reranker reranker;
+        @Mock
+        private java.util.concurrent.Executor searchTaskExecutor;
 
+        @Mock
+        private com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper noteMapper;
+
+        @InjectMocks
         private SearchServiceImpl searchService;
 
         @BeforeEach
         void setUp() {
-                searchService = new SearchServiceImpl(
-                                noteRepository, contentRepository, noteFolderMapper,
-                                elasticsearchOperations, embeddingService, qdrantClient, contentItemMapper);
         }
 
         @Test
@@ -86,5 +97,27 @@ class SearchServiceSemanticTest {
                 assertFalse(result.isEmpty());
                 assertEquals(1, result.getContent().size());
                 assertEquals("AI Article", result.getContent().get(0).getTitle());
+        }
+
+        /**
+         * 回归测试：语义检索必须按 userId 过滤，否则会检索到其他用户的内容。
+         */
+        @Test
+        void searchContentSemantic_ShouldFilterByUserId() throws ExecutionException, InterruptedException {
+                Long userId = 42L;
+                when(embeddingService.embed("AI")).thenReturn(List.of(0.1f, 0.2f));
+                when(qdrantClient.searchAsync(any(Points.SearchPoints.class)))
+                                .thenReturn(Futures.immediateFuture(List.of()));
+
+                searchService.searchContentSemantic("AI", userId, 0, 10);
+
+                ArgumentCaptor<Points.SearchPoints> captor = ArgumentCaptor.forClass(Points.SearchPoints.class);
+                verify(qdrantClient).searchAsync(captor.capture());
+
+                List<Points.Condition> must = captor.getValue().getFilter().getMustList();
+                assertTrue(must.stream()
+                                .anyMatch(c -> "userId".equals(c.getField().getKey())
+                                                && c.getField().getMatch().getInteger() == userId),
+                                "向量检索缺少 userId 过滤条件，存在越权读取风险");
         }
 }

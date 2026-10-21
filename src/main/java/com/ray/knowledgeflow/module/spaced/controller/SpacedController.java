@@ -71,7 +71,8 @@ public class SpacedController {
     @PostMapping("/questions/{noteId}/regenerate")
     public Result<List<ReviewNoteDto.QuestionDto>> regenerateQuestions(
             @PathVariable Long noteId) {
-        List<ReviewNoteDto.QuestionDto> questions = spacedService.generateQuestions(noteId);
+        Long userId = SecurityUtils.getCurrentUserId();
+        List<ReviewNoteDto.QuestionDto> questions = spacedService.generateQuestions(userId, noteId);
         return Result.success(questions);
     }
 }

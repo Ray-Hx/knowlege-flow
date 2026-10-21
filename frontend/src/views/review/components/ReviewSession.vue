@@ -21,7 +21,7 @@ const progress = computed(() => Math.round((currentIndex.value / props.notes.len
 
 const goToNote = () => {
   if (currentNote.value?.noteId) {
-    router.push(`/note/${currentNote.value.noteId}`)
+    router.push(`/notes/${currentNote.value.noteId}`)
   }
 }
 
@@ -63,7 +63,7 @@ const handleGrade = async (quality: number) => {
         color="#818cf8"
         class="flex-1"
       />
-      <span class="text-white/70 text-sm font-medium whitespace-nowrap">
+      <span class="text-gray-500 text-sm font-medium whitespace-nowrap">
         {{ currentIndex + 1 }} / {{ notes.length }}
       </span>
     </div>
@@ -84,11 +84,29 @@ const handleGrade = async (quality: number) => {
 
       <!-- 摘要内容 -->
       <div class="px-8 py-6">
-        <div v-if="currentNote?.summary" class="text-gray-600 leading-relaxed text-base">
+        <div v-if="currentNote?.questions && currentNote.questions.length > 0" class="space-y-4">
+          <div class="text-sm font-bold text-indigo-600 mb-2 flex items-center gap-2">
+            <span>🤖</span> AI 智能提问：
+          </div>
+          <div v-for="(q, idx) in currentNote.questions" :key="q.id" class="bg-indigo-50/50 border border-indigo-100 p-4 rounded-xl transition-all">
+            <p class="text-gray-800 font-medium mb-3">{{ idx + 1 }}. {{ q.question }}</p>
+            
+            <details class="group cursor-pointer">
+              <summary class="text-sm text-indigo-500 font-medium list-none flex items-center gap-1 hover:text-indigo-700">
+                <span class="group-open:rotate-90 transition-transform text-xs">▶</span> 点击查看 AI 解析
+              </summary>
+              <div class="mt-3 text-sm text-gray-600 pt-3 border-t border-indigo-100/50 leading-relaxed">
+                {{ q.answer }}
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div v-else-if="currentNote?.summary" class="text-gray-600 leading-relaxed text-base">
           {{ currentNote.summary }}
         </div>
         <div v-else class="text-gray-400 italic text-sm">
-          该笔记暂无摘要，点击下方按钮查看原文内容。
+          该笔记暂无摘要与题目，点击下方按钮查看原文内容。
         </div>
       </div>
 
@@ -153,9 +171,9 @@ const handleGrade = async (quality: number) => {
     </div>
 
     <!-- 本次进度小统计 -->
-    <div v-if="currentIndex > 0" class="flex justify-center gap-6 text-sm text-white/60">
-      <span>✅ 记住 {{ sessionStats.remembered }} 篇</span>
-      <span>❌ 忘了 {{ sessionStats.forgot }} 篇</span>
+    <div class="flex justify-center gap-6 text-sm text-gray-400">
+      <span class="flex items-center gap-1.5"><span class="text-base text-emerald-500">✅</span> 记住 {{ sessionStats.remembered }} 篇</span>
+      <span class="flex items-center gap-1.5"><span class="text-base text-rose-500">❌</span> 忘了 {{ sessionStats.forgot }} 篇</span>
     </div>
   </div>
 </template>

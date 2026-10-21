@@ -2,9 +2,11 @@ package com.ray.knowledgeflow.module.content.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.ray.knowledgeflow.common.utils.HttpClientUtil;
+import com.ray.knowledgeflow.common.utils.OutboundUrlValidator;
 import com.ray.knowledgeflow.module.content.entity.ContentItem;
 import com.ray.knowledgeflow.module.content.entity.ContentSource;
 import com.ray.knowledgeflow.module.content.mapper.ContentItemMapper;
+import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
 import com.ray.knowledgeflow.module.content.service.IArXivFetchService;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
@@ -12,6 +14,7 @@ import com.rometools.rome.io.SyndFeedInput;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 
 /**
  * arXiv抓取服务实现类
@@ -33,6 +37,7 @@ import java.util.List;
 public class ArXivFetchServiceImpl implements IArXivFetchService {
 
     private final ContentItemMapper contentItemMapper;
+    private final ContentSourceMapper contentSourceMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -55,6 +60,7 @@ public class ArXivFetchServiceImpl implements IArXivFetchService {
             if (apiUrl == null || apiUrl.isEmpty()) {
                 throw new RuntimeException("arXiv URL不能为空");
             }
+            OutboundUrlValidator.requireHost(apiUrl, false, Set.of("export.arxiv.org"));
 
             log.info("开始抓取arXiv论文: url={}", apiUrl);
 
@@ -70,6 +76,12 @@ public class ArXivFetchServiceImpl implements IArXivFetchService {
             for (SyndEntry entry : entries) {
                 // 提取arXiv ID和URL
                 String link = entry.getLink();
+                try {
+                    link = OutboundUrlValidator.requirePublicHttpUrl(link).toString();
+                } catch (IllegalArgumentException e) {
+                    log.warn("arXiv 条目 URL 无效，已跳过: {}", e.getMessage());
+                    continue;
+                }
 
                 // 检查是否已存在
                 long exists = contentItemMapper.selectCount(new LambdaQueryWrapper<ContentItem>()
@@ -107,14 +119,14 @@ public class ArXivFetchServiceImpl implements IArXivFetchService {
                 // 提取摘要
                 if (entry.getDescription() != null) {
                     String summary = entry.getDescription().getValue();
-                    String plainText = Jsoup.parse(summary).text();
+                    String plainText = Jsoup.clean(Jsoup.parse(summary).text(), Safelist.none());
                     item.setSummary(plainText.length() > 500 ? plainText.substring(0, 500) + "..." : plainText);
                 }
 
                 // 提取全文内容（包括摘要和PDF链接）
                 if (entry.getContents() != null && !entry.getContents().isEmpty()) {
                     String content = entry.getContents().get(0).getValue();
-                    item.setContentText(Jsoup.parse(content).text());
+                    item.setContentText(Jsoup.clean(Jsoup.parse(content).text(), Safelist.none()));
                 }
 
                 // 提取分类标签
@@ -134,8 +146,6 @@ public class ArXivFetchServiceImpl implements IArXivFetchService {
                         .publishEvent(new com.ray.knowledgeflow.module.search.event.ContentSavedEvent(this, item));
                 newCount++;
 
-                // 遵守arXiv API要求：请求间隔至少3秒
-                Thread.sleep(3000);
             }
 
             log.info("arXiv抓取完成: 新增{}篇论文", newCount);
@@ -157,7 +167,12 @@ public class ArXivFetchServiceImpl implements IArXivFetchService {
 
     @Override
     public void fetchFromSource(Long sourceId, Long userId) {
-        log.info("arXiv fetchFromSource 占位方法: sourceId={}, userId={}", sourceId, userId);
-        // TODO: 实现根据 sourceId查询并调用 fetchAsync
+        ContentSource source = contentSourceMapper.selectOne(new LambdaQueryWrapper<ContentSource>()
+                .eq(ContentSource::getId, sourceId)
+                .eq(ContentSource::getUserId, userId));
+        if (source == null || source.getType() == null || !"ARXIV".equalsIgnoreCase(source.getType())) {
+            throw new IllegalArgumentException("内容源不存在、无权访问或类型不匹配");
+        }
+        fetch(source);
     }
 }

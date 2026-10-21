@@ -24,6 +24,7 @@ public interface ISpacedService {
      * 提交复习结果
      *
      * @param userId 用户ID
+     * @param userId 当前用户ID
      * @param noteId 笔记ID
      * @param dto    复习结果
      */
@@ -43,7 +44,7 @@ public interface ISpacedService {
      * @param noteId 笔记ID
      * @return 生成的问题列表
      */
-    List<ReviewNoteDto.QuestionDto> generateQuestions(Long noteId);
+    List<ReviewNoteDto.QuestionDto> generateQuestions(Long userId, Long noteId);
 
     /**
      * 初始化用户的笔记复习队列 (将所有笔记加入)

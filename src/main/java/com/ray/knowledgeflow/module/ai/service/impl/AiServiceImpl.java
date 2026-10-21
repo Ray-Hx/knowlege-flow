@@ -11,24 +11,33 @@ import com.ray.knowledgeflow.module.ai.dto.MessageDto;
 import com.ray.knowledgeflow.module.ai.dto.NoteReferenceDto;
 import com.ray.knowledgeflow.module.ai.dto.SendMessageDto;
 import com.ray.knowledgeflow.module.ai.entity.AiConversation;
+import com.ray.knowledgeflow.module.ai.service.RagRetriever;
 import com.ray.knowledgeflow.module.ai.entity.AiMessage;
 import com.ray.knowledgeflow.module.ai.mapper.AiConversationMapper;
 import com.ray.knowledgeflow.module.ai.mapper.AiMessageMapper;
 import com.ray.knowledgeflow.module.ai.service.IAiService;
+import com.ray.knowledgeflow.module.content.entity.ContentItem;
+import com.ray.knowledgeflow.module.content.mapper.ContentItemMapper;
+import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
+import com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper;
+import com.ray.knowledgeflow.module.ai.service.ConversationMemory;
+import com.ray.knowledgeflow.module.ai.service.QueryRewriter;
 import com.ray.knowledgeflow.module.search.service.EmbeddingService;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import io.qdrant.client.QdrantClient;
 import io.qdrant.client.grpc.Points;
 import dev.langchain4j.model.chat.StreamingChatLanguageModel;
 import dev.langchain4j.model.output.Response;
-import dev.langchain4j.service.AiServices;
 import dev.langchain4j.model.StreamingResponseHandler;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -56,9 +65,15 @@ public class AiServiceImpl implements IAiService {
     private final StreamingChatLanguageModel streamingChatModel;
     private final EmbeddingService embeddingService;
     private final QdrantClient qdrantClient;
+    private final ContentItemMapper contentItemMapper;
     private final com.ray.knowledgeflow.module.ai.mapper.AiAnalysisMapper analysisMapper;
-
-    private static final String CHUNK_COLLECTION = "content_chunks";
+    private final RagRetriever ragRetriever;
+    private final ConversationMemory conversationMemory;
+    private final QueryRewriter queryRewriter;
+    private final NoteEntryMapper noteEntryMapper;
+    private final ContentSourceMapper contentSourceMapper;
+    @Qualifier("aiTaskExecutor")
+    private final Executor aiTaskExecutor;
 
     @Override
     @Transactional
@@ -104,9 +119,14 @@ public class AiServiceImpl implements IAiService {
             throw new BusinessException("对话不存在");
         }
 
-        // 逻辑删除
-        conv.setDeleted(1);
-        conversationMapper.updateById(conv);
+        // 1. 使用 deleteById 触发 MyBatis-Plus 的逻辑删除 (deleted=1)
+        conversationMapper.deleteById(conversationId);
+
+        // 2. 删除关联的消息记录 (ai_message 表没有 deleted 字段，直接物理删除)
+        messageMapper.delete(new LambdaQueryWrapper<AiMessage>()
+                .eq(AiMessage::getConversationId, conversationId));
+
+        log.info("用户 {} 删除了对话 {} 及其关联消息", userId, conversationId);
     }
 
     @Override
@@ -120,6 +140,9 @@ public class AiServiceImpl implements IAiService {
         if (conv == null) {
             throw new BusinessException("对话不存在");
         }
+
+        // 0. 载入历史窗口。必须在保存当前消息之前，否则这一轮的提问会混进历史
+        List<ChatMessage> history = conversationMemory.load(conversationId);
 
         // 1. 保存用户消息
         AiMessage userMsg = new AiMessage();
@@ -142,79 +165,20 @@ public class AiServiceImpl implements IAiService {
         String finalPrompt = dto.getContent();
 
         if (Boolean.TRUE.equals(dto.getUseRag())) {
-            try {
-                // 使用 Qdrant 向量检索 Content Chunks
-                log.info("RAG检索开始: query={}, userId={}", dto.getContent(), userId);
-                List<Float> vector = embeddingService.embed(dto.getContent());
-                log.info("向量生成完成: vectorSize={}", vector.size());
-
-                if (!vector.isEmpty()) {
-                    // 构建用户 ID 过滤条件 - 只检索当前用户的笔记
-                    Points.Filter userFilter = Points.Filter.newBuilder()
-                            .addMust(Points.Condition.newBuilder()
-                                    .setField(Points.FieldCondition.newBuilder()
-                                            .setKey("userId")
-                                            .setMatch(Points.Match.newBuilder()
-                                                    .setInteger(userId)
-                                                    .build())
-                                            .build())
-                                    .build())
-                            .build();
-
-                    Points.SearchPoints searchPoints = Points.SearchPoints.newBuilder()
-                            .setCollectionName(CHUNK_COLLECTION)
-                            .addAllVector(vector)
-                            .setLimit(5)
-                            .setFilter(userFilter) // 按用户 ID 过滤
-                            .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build())
-                            .setScoreThreshold(0.5f) // 降低阈值以提高召回率
-                            .build();
-
-                    List<Points.ScoredPoint> results = qdrantClient.searchAsync(searchPoints).get();
-                    log.info("RAG检索结果: count={}", results.size());
-
-                    if (!results.isEmpty()) {
-                        StringBuilder contextBuilder = new StringBuilder();
-                        contextBuilder.append("以下是参考资料：\n\n");
-
-                        for (Points.ScoredPoint point : results) {
-                            String content = point.getPayloadMap().get("content").getStringValue();
-                            String title = point.getPayloadMap().get("title").getStringValue();
-                            long sourceId = point.getPayloadMap().get("sourceId").getIntegerValue();
-                            String sourceType = point.getPayloadMap().containsKey("sourceType")
-                                    ? point.getPayloadMap().get("sourceType").getStringValue()
-                                    : "CONTENT";
-
-                            log.info("RAG检索命中: title={}, sourceId={}, sourceType={}, score={}",
-                                    title, sourceId, sourceType, point.getScore());
-
-                            contextBuilder.append("--- [").append(title).append("] ---\n");
-                            contextBuilder.append(content).append("\n\n");
-
-                            references.add(new NoteReferenceDto(
-                                    sourceId,
-                                    title,
-                                    content.length() > 100 ? content.substring(0, 100) + "..." : content,
-                                    (double) point.getScore()));
-                        }
-
-                        contextBuilder.append("请基于以上参考资料回答用户的问题。如果资料不足，请用你的通用知识补充。问题：\n");
-                        contextBuilder.append(dto.getContent());
-                        finalPrompt = contextBuilder.toString();
-                    } else {
-                        log.info("RAG检索无结果，使用原始 prompt");
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("RAG检索失败: {}", e.getMessage(), e);
-                // 降级：继续使用原始 prompt
-            }
+            // 检索端拿不到历史，先把追问里的指代补全再去召回
+            String retrievalQuery = queryRewriter.rewrite(dto.getContent(), history);
+            RagRetriever.RagContext context = ragRetriever.retrieve(
+                    retrievalQuery, dto.getContent(), userId, this::resolveSubType);
+            finalPrompt = context.getPrompt();
+            references = context.getReferences();
         }
 
-        // 3. 调用 AI
+        // 3. 调用 AI。带上历史窗口，模型才能解析追问中的指代
         String aiResponseText;
         try {
-            aiResponseText = chatModel.generate(finalPrompt);
+            List<ChatMessage> messages = new ArrayList<>(history);
+            messages.add(UserMessage.from(finalPrompt));
+            aiResponseText = chatModel.generate(messages).content().text();
         } catch (Exception e) {
             log.error("AI调用失败", e);
             aiResponseText = "抱歉，AI服务暂时不可用，请稍后再试。";
@@ -235,6 +199,135 @@ public class AiServiceImpl implements IAiService {
     }
 
     @Override
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamChat(Long userId, Long conversationId,
+            SendMessageDto dto) {
+        SseEmitter emitter = new SseEmitter(180000L); // 3 minutes timeout
+
+        try {
+            aiTaskExecutor.execute(() -> {
+            try {
+                // 验证对话归属
+                AiConversation conv = conversationMapper.selectOne(
+                        new LambdaQueryWrapper<AiConversation>()
+                                .eq(AiConversation::getId, conversationId)
+                                .eq(AiConversation::getUserId, userId));
+                if (conv == null) {
+                    emitter.send(SseEmitter.event().name("error").data("对话不存在"));
+                    emitter.complete();
+                    return;
+                }
+
+                // 0. 载入历史窗口。必须在保存当前消息之前，否则这一轮的提问会混进历史
+                List<ChatMessage> history = conversationMemory.load(conversationId);
+
+                // 1. 保存用户消息
+                AiMessage userMsg = new AiMessage();
+                userMsg.setConversationId(conversationId);
+                userMsg.setRole("user");
+                userMsg.setContent(dto.getContent());
+                userMsg.setCreatedTime(LocalDateTime.now());
+                messageMapper.insert(userMsg);
+
+                // 更新对话时间
+                conv.setUpdatedTime(LocalDateTime.now());
+                if ("新建对话".equals(conv.getTitle()) || conv.getTitle().startsWith("新对话")) {
+                    conv.setTitle(
+                            dto.getContent().length() > 20 ? dto.getContent().substring(0, 20) + "..."
+                                    : dto.getContent());
+                }
+                conversationMapper.updateById(conv);
+
+                // 发送 userMessageId 和 references 给前端的 event (可选, 为了尽早返回上下文)
+
+                // 2. RAG: 检索相关笔记。检索端拿不到历史，先把追问里的指代补全再去召回
+                RagRetriever.RagContext ragContext = Boolean.TRUE.equals(dto.getUseRag())
+                        ? ragRetriever.retrieve(
+                                queryRewriter.rewrite(dto.getContent(), history),
+                                dto.getContent(), userId, this::resolveSubType)
+                        : null;
+
+                // 流式回调为内部类，引用的变量必须是 effectively final
+                final List<NoteReferenceDto> references = ragContext != null
+                        ? ragContext.getReferences()
+                        : new ArrayList<>();
+                final String finalPrompt = ragContext != null
+                        ? ragContext.getPrompt()
+                        : dto.getContent();
+
+                // 给前端发 reference (转成json并作为引用对象给前端，这样前端可以直接渲染引用)
+                try {
+                    String refsJson = referencesToJson(references);
+                    if (refsJson != null) {
+                        emitter.send(SseEmitter.event().name("references").data(refsJson));
+                    }
+                } catch (Exception e) {
+                    log.error("Failed to send refs", e);
+                }
+
+                // 3. 调用 AI 流式输出。带上历史窗口，模型才能解析追问中的指代
+                List<ChatMessage> messages = new ArrayList<>(history);
+                messages.add(UserMessage.from(finalPrompt));
+                streamingChatModel.generate(messages,
+                        new StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>() {
+                            private final StringBuilder fullContent = new StringBuilder();
+
+                            @Override
+                            public void onNext(String token) {
+                                try {
+                                    emitter.send(SseEmitter.event().name("message").data(token));
+                                    fullContent.append(token);
+                                } catch (Exception e) {
+                                    log.error("Error sending SSE chunk", e);
+                                    emitter.completeWithError(e);
+                                }
+                            }
+
+                            @Override
+                            public void onComplete(Response<dev.langchain4j.data.message.AiMessage> response) {
+                                // 4. 生成完成，保存回复
+                                try {
+                                    AiMessage aiMsg = new AiMessage();
+                                    aiMsg.setConversationId(conversationId);
+                                    aiMsg.setRole("assistant");
+                                    aiMsg.setContent(fullContent.toString());
+                                    aiMsg.setReferences(referencesToJson(references));
+                                    aiMsg.setCreatedTime(LocalDateTime.now());
+                                    messageMapper.insert(aiMsg);
+
+                                    // 给前端发送最终消息ID（可选，让前端知道完成）
+                                    emitter.send(SseEmitter.event().name("done")
+                                            .data(objectMapper.writeValueAsString(toMessageDto(aiMsg))));
+                                } catch (Exception e) {
+                                    log.error("Error saving streamed ai message", e);
+                                }
+                                emitter.complete();
+                            }
+
+                            @Override
+                            public void onError(Throwable error) {
+                                log.error("Error in streaming chat generation", error);
+                                try {
+                                    emitter.send(SseEmitter.event().name("error").data("生成失败"));
+                                } catch (Exception ignored) {
+                                }
+                                emitter.completeWithError(error);
+                            }
+                        });
+
+            } catch (Exception e) {
+                log.error("Streaming chat setup error", e);
+                emitter.completeWithError(e);
+            }
+            });
+        } catch (RejectedExecutionException e) {
+            log.warn("AI 流式任务队列已满: conversationId={}", conversationId);
+            emitter.completeWithError(new BusinessException(503, "AI 服务繁忙，请稍后重试"));
+        }
+
+        return emitter;
+    }
+
+    @Override
     public List<MessageDto> getMessages(Long userId, Long conversationId) {
         // 验证归属
         Long count = conversationMapper.selectCount(
@@ -251,6 +344,22 @@ public class AiServiceImpl implements IAiService {
                         .orderByAsc(AiMessage::getCreatedTime));
 
         return messages.stream().map(this::toMessageDto).collect(Collectors.toList());
+    }
+
+    private String resolveSubType(Long sourceId, String sourceType) {
+        if ("NOTE".equalsIgnoreCase(sourceType)) {
+            return "NOTE";
+        }
+        // Fallback for CONTENT: check DB
+        try {
+            ContentItem item = contentItemMapper.selectById(sourceId);
+            if (item != null) {
+                return item.getSourceId() == null ? "UPLOAD" : "FEED";
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resolve subType from DB for sourceId={}", sourceId);
+        }
+        return "UPLOAD"; // Default to UPLOAD
     }
 
     // ============ 辅助方法 ============
@@ -308,18 +417,32 @@ public class AiServiceImpl implements IAiService {
     }
 
     @Override
-    public List<String> extractTags(String content) {
-        if (!StringUtils.hasText(content)) {
+    public List<String> extractTags(String title, String content) {
+        // 优先使用正文，若正文为空则使用标题
+        String textToAnalyze = StringUtils.hasText(content) ? content : title;
+
+        if (!StringUtils.hasText(textToAnalyze)) {
             return new ArrayList<>();
         }
         try {
-            String prompt = "请从以下内容中提取3-5个关键标签，只返回标签，用逗号分隔，不要包含其他文字：\n\n" +
-                    (content.length() > 2000 ? content.substring(0, 2000) : content);
+            String prompt = "你是一个专业的知识提取助手。请从以下内容中提取 3-5 个最相关的关键标签。\n" +
+                    "要求：\n" +
+                    "1. 只返回标签，使用英文逗号分隔。\n" +
+                    "2. 不要包含任何开场白、解释或标记（如 '标签：' 或 ```）。\n" +
+                    "3. 标签应为简洁的词汇（如：Java, 架构设计, 机器学习）。\n\n" +
+                    "内容：\n" +
+                    (textToAnalyze.length() > 2000 ? textToAnalyze.substring(0, 2000) : textToAnalyze);
+
             String response = chatModel.generate(prompt);
+            log.info("AI 提取标签原始回复: {}", response);
 
             // 处理结果
             if (StringUtils.hasText(response)) {
-                String[] tags = response.replace("，", ",").split(",");
+                // 移除可能的 Markdown 代码块标记和 "标签：" 前缀
+                String cleanResponse = response.replaceAll("```[a-zA-Z]*\\n?", "").replace("```", "")
+                        .replaceAll("^[\\s]*标签[:：\\s]*", "").trim();
+
+                String[] tags = cleanResponse.replace("，", ",").split(",");
                 List<String> result = new ArrayList<>();
                 for (String tag : tags) {
                     String cleanTag = tag.trim();
@@ -327,6 +450,7 @@ public class AiServiceImpl implements IAiService {
                         result.add(cleanTag);
                     }
                 }
+                log.info("AI 提取标签解析结果: {}", result);
                 return result;
             }
             return new ArrayList<>();
@@ -337,24 +461,17 @@ public class AiServiceImpl implements IAiService {
     }
 
     @Override
-    public com.ray.knowledgeflow.module.ai.dto.AiAnalysisResultDto generateDeepAnalysis(String content,
+    public com.ray.knowledgeflow.module.ai.dto.AiAnalysisResultDto generateDeepAnalysis(Long userId, String content,
             String targetTypeStr, Long targetId) {
         if (!StringUtils.hasText(content)) {
             return null;
         }
 
+        com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType targetType =
+                resolveOwnedAnalysisTarget(userId, targetTypeStr, targetId);
+
         try {
             // Check cache
-            com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType targetType = null;
-            try {
-                if (StringUtils.hasText(targetTypeStr)) {
-                    targetType = com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType
-                            .valueOf(targetTypeStr.toUpperCase());
-                }
-            } catch (IllegalArgumentException e) {
-                log.warn("Invalid target type: {}", targetTypeStr);
-            }
-
             if (targetType != null && targetId != null) {
                 com.ray.knowledgeflow.module.ai.entity.AiAnalysis existing = analysisMapper.selectOne(
                         new LambdaQueryWrapper<com.ray.knowledgeflow.module.ai.entity.AiAnalysis>()
@@ -404,7 +521,7 @@ public class AiServiceImpl implements IAiService {
     }
 
     @Override
-    public SseEmitter streamDeepAnalysis(String content, String targetTypeStr, Long targetId) {
+    public SseEmitter streamDeepAnalysis(Long userId, String content, String targetTypeStr, Long targetId) {
         SseEmitter emitter = new SseEmitter(180000L); // 3 minutes timeout
 
         if (!StringUtils.hasText(content)) {
@@ -416,20 +533,14 @@ public class AiServiceImpl implements IAiService {
             return emitter;
         }
 
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.submit(() -> {
+        // 在开始 SSE 响应前完成权限校验，避免后台线程读取其他用户的缓存。
+        final com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType targetType =
+                resolveOwnedAnalysisTarget(userId, targetTypeStr, targetId);
+
+        try {
+            aiTaskExecutor.execute(() -> {
             try {
                 // Check cache
-                com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType targetType = null;
-                try {
-                    if (StringUtils.hasText(targetTypeStr)) {
-                        targetType = com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType
-                                .valueOf(targetTypeStr.toUpperCase());
-                    }
-                } catch (IllegalArgumentException e) {
-                    log.warn("Invalid target type: {}", targetTypeStr);
-                }
-
                 if (targetType != null && targetId != null) {
                     com.ray.knowledgeflow.module.ai.entity.AiAnalysis existing = analysisMapper.selectOne(
                             new LambdaQueryWrapper<com.ray.knowledgeflow.module.ai.entity.AiAnalysis>()
@@ -512,9 +623,54 @@ public class AiServiceImpl implements IAiService {
                 log.error("Streaming error", e);
                 emitter.completeWithError(e);
             }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            log.warn("AI 深度解析任务队列已满: targetType={}, targetId={}", targetTypeStr, targetId);
+            emitter.completeWithError(new BusinessException(503, "AI 服务繁忙，请稍后重试"));
+        }
 
         return emitter;
+    }
+
+    /**
+     * 只有能证明属于当前用户的持久化目标才允许读写全局解析缓存。
+     * CONCEPT 当前没有用户归属事实表，因此仍可解析客户端提供的文本，但禁用缓存。
+     */
+    private com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType resolveOwnedAnalysisTarget(
+            Long userId, String targetTypeStr, Long targetId) {
+        if (!StringUtils.hasText(targetTypeStr) || targetId == null) {
+            return null;
+        }
+
+        final com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType targetType;
+        try {
+            targetType = com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType
+                    .valueOf(targetTypeStr.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, "目标类型无效");
+        }
+
+        if (targetType == com.ray.knowledgeflow.module.ai.enums.AiAnalysisTargetType.CONCEPT) {
+            log.debug("概念解析暂无用户归属事实表，本次不使用持久化缓存: targetId={}", targetId);
+            return null;
+        }
+
+        boolean owned = switch (targetType) {
+            case NOTE -> noteEntryMapper.selectCount(
+                    new LambdaQueryWrapper<com.ray.knowledgeflow.module.note.entity.NoteEntry>()
+                            .eq(com.ray.knowledgeflow.module.note.entity.NoteEntry::getId, targetId)
+                            .eq(com.ray.knowledgeflow.module.note.entity.NoteEntry::getUserId, userId)) > 0;
+            case SOURCE -> contentSourceMapper.selectCount(
+                    new LambdaQueryWrapper<com.ray.knowledgeflow.module.content.entity.ContentSource>()
+                            .eq(com.ray.knowledgeflow.module.content.entity.ContentSource::getId, targetId)
+                            .eq(com.ray.knowledgeflow.module.content.entity.ContentSource::getUserId, userId)) > 0;
+            case CONCEPT -> false;
+        };
+
+        if (!owned) {
+            throw new BusinessException(404, "解析目标不存在");
+        }
+        return targetType;
     }
 
     @Override

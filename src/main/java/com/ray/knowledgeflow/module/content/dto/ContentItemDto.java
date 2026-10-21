@@ -59,6 +59,11 @@ public class ContentItemDto {
     private Integer status;
 
     /**
+     * 正文内容
+     */
+    private String contentText;
+
+    /**
      * 标签
      */
     private String tags;

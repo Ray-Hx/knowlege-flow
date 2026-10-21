@@ -1,7 +1,10 @@
 package com.ray.knowledgeflow.module.graph.entity;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import org.springframework.data.neo4j.core.schema.GeneratedValue;
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.RelationshipProperties;
@@ -13,13 +16,17 @@ import org.springframework.data.neo4j.core.schema.TargetNode;
  * @author Ray
  * @since 2024-02-02
  */
-@Data
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @NoArgsConstructor
 @RelationshipProperties
 public class RelatedRelation {
 
     @Id
     @GeneratedValue
+    @EqualsAndHashCode.Include
     private Long id;
 
     /**
@@ -28,6 +35,7 @@ public class RelatedRelation {
     private String label;
 
     @TargetNode
+    @ToString.Exclude
     private NoteNode target;
 
     public RelatedRelation(NoteNode target, String label) {

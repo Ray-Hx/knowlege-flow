@@ -20,6 +20,9 @@ class ChunkingServiceTest {
     @Mock
     private EmbeddingService embeddingService;
 
+    @Mock
+    private SemanticChunker semanticChunker;
+
     @InjectMocks
     private ChunkingService chunkingService;
 
@@ -29,9 +32,15 @@ class ChunkingServiceTest {
         String longText = "This is a long text that needs to be chunked. ".repeat(50);
         ContentItem item = new ContentItem();
         item.setId(1L);
+        item.setUserId(1L);
         item.setTitle("Test Title");
+        item.setSummary("Test Summary");
+        item.setTags("tag1,tag2");
         item.setContentText(longText);
 
+        // 切分策略由 SemanticChunkerTest 单独覆盖，这里只验证索引编排逻辑
+        when(semanticChunker.chunk(anyString())).thenReturn(List.of(
+                "chunk one", "chunk two", "chunk three", "chunk four", "chunk five"));
         when(embeddingService.embed(anyString())).thenReturn(List.of(0.1f, 0.2f, 0.3f));
 
         // Act
@@ -43,9 +52,12 @@ class ChunkingServiceTest {
         verify(embeddingService, times(1)).upsert(eq("content_chunks"), captor.capture());
 
         List points = captor.getValue();
-        // Total length approx 2300 chars. Chunk size 500. Expected ~5 chunks.
-        org.junit.jupiter.api.Assertions.assertTrue(points.size() >= 4,
-                "Should have at least 4 chunks, but got " + points.size());
+        // 切分器返回 5 个切片，应一一对应生成 5 个向量点，并合并为一次批量写入
+        org.junit.jupiter.api.Assertions.assertEquals(5, points.size(),
+                "每个切片应生成一个向量点，实际 " + points.size());
+
+        // Verify metadata prefix in embedding call
+        verify(embeddingService, atLeastOnce()).embed(contains("标题：Test Title 摘要：Test Summary 标签：tag1,tag2"));
 
         // Verify metadata
         io.qdrant.client.grpc.Points.PointStruct firstPoint = (io.qdrant.client.grpc.Points.PointStruct) points.get(0);

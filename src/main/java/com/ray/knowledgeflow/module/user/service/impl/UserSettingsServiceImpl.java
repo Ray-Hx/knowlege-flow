@@ -1,8 +1,5 @@
 package com.ray.knowledgeflow.module.user.service.impl;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ray.knowledgeflow.common.exception.BusinessException;
 import com.ray.knowledgeflow.module.user.dto.UserSettingsDto;
 import com.ray.knowledgeflow.module.user.entity.SysUserProfile;
 import com.ray.knowledgeflow.module.user.mapper.UserProfileMapper;
@@ -24,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserSettingsServiceImpl implements IUserSettingsService {
 
     private final UserProfileMapper userProfileMapper;
-    private final ObjectMapper objectMapper;
 
     @Override
     public UserSettingsDto getSettings(Long userId) {
@@ -35,12 +31,7 @@ public class UserSettingsServiceImpl implements IUserSettingsService {
             return createDefaultSettings();
         }
 
-        try {
-            return objectMapper.readValue(profile.getPreferences(), UserSettingsDto.class);
-        } catch (JsonProcessingException e) {
-            log.error("解析用户设置失败: userId={}", userId, e);
-            return createDefaultSettings();
-        }
+        return profile.getPreferences();
     }
 
     @Override
@@ -51,16 +42,13 @@ public class UserSettingsServiceImpl implements IUserSettingsService {
         if (profile == null) {
             profile = new SysUserProfile();
             profile.setUserId(userId);
+            profile.setPreferences(settings);
+            profile.setIsPublic(isPublicProfile(settings) ? 1 : 0);
             userProfileMapper.insert(profile);
-        }
-
-        try {
-            String preferencesJson = objectMapper.writeValueAsString(settings);
-            profile.setPreferences(preferencesJson);
+        } else {
+            profile.setPreferences(settings);
+            profile.setIsPublic(isPublicProfile(settings) ? 1 : 0);
             userProfileMapper.updateById(profile);
-        } catch (JsonProcessingException e) {
-            log.error("序列化用户设置失败", e);
-            throw new BusinessException(500, "保存设置失败");
         }
 
         return settings;
@@ -83,5 +71,11 @@ public class UserSettingsServiceImpl implements IUserSettingsService {
         settings.setLearningSettings(new UserSettingsDto.LearningSettings());
         settings.setPrivacySettings(new UserSettingsDto.PrivacySettings());
         return settings;
+    }
+
+    private boolean isPublicProfile(UserSettingsDto settings) {
+        return settings != null
+                && settings.getPrivacySettings() != null
+                && Boolean.TRUE.equals(settings.getPrivacySettings().getPublicProfile());
     }
 }

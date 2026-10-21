@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 @RestController
 @RequestMapping("/notes")
 @RequiredArgsConstructor
+@Validated
 public class NoteController {
 
     private final INoteService noteService;
@@ -35,7 +38,7 @@ public class NoteController {
 
     @PutMapping("/{id}")
     @Operation(summary = "更新笔记")
-    public Result<NoteDetailDto> updateNote(@PathVariable Long id, @RequestBody UpdateNoteDto dto) {
+    public Result<NoteDetailDto> updateNote(@PathVariable Long id, @Validated @RequestBody UpdateNoteDto dto) {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.success(noteService.updateNote(userId, id, dto));
     }
@@ -59,9 +62,16 @@ public class NoteController {
     @Operation(summary = "分页查询笔记列表")
     public Result<IPage<NoteListDto>> listNotes(
             @RequestParam(required = false) Long folderId,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") @Min(1) Integer page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) Integer size) {
         Long userId = SecurityUtils.getCurrentUserId();
+
+        // 如果提供了关键词，走搜索逻辑
+        if (org.springframework.util.StringUtils.hasText(keyword)) {
+            return Result.success(noteService.searchNotes(userId, keyword, page, size));
+        }
+
         return Result.success(noteService.listNotes(userId, folderId, page, size));
     }
 
@@ -69,8 +79,8 @@ public class NoteController {
     @Operation(summary = "搜索笔记")
     public Result<IPage<NoteListDto>> searchNotes(
             @RequestParam String keyword,
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size) {
+            @RequestParam(defaultValue = "1") @Min(1) Integer page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) Integer size) {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.success(noteService.searchNotes(userId, keyword, page, size));
     }

@@ -35,7 +35,8 @@ public class FileFetchServiceImpl implements IFileFetchService {
             "application/pdf",
             "text/markdown",
             "text/html",
-            "text/plain");
+            "text/plain",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
 
     private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 

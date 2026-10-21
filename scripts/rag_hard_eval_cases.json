@@ -1,0 +1,482 @@
+[
+{
+"id": "NTP-001",
+"query": "后台一下子涌入很多任务时，我想限制同时工作的线程数量，并在队列塞满后决定是丢弃、报错还是由调用方处理，这类机制应该看哪部分知识？",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["Java 线程池详解"],
+"gold_keywords": ["核心线程", "最大线程", "任务队列", "拒绝策略"],
+"gold_answer": "应关注线程池的核心线程数、最大线程数、任务队列和拒绝策略；这些机制共同决定任务如何被接收、排队以及过载时如何处理。",
+"answerable": true
+},
+{
+"id": "NTP-002",
+"query": "我有几个彼此依赖的异步步骤，希望上一步结果直接喂给下一步，同时统一处理失败情况，Java 里通常怎么组织这种流程？",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["CompletableFuture 异步编程"],
+"gold_keywords": ["异步任务组合", "thenApply", "thenCompose", "异常处理"],
+"gold_answer": "可以用 CompletableFuture 对异步任务做组合，按依赖关系使用 thenApply 或 thenCompose 串联，并在链路上集中处理异常。",
+"answerable": true
+},
+{
+"id": "NTP-003",
+"query": "多个线程同时读写一个共享映射容器时，为什么有一种实现能在减少全局互斥的同时保持线程安全？我想了解它内部的 CAS、桶和扩容思路。",
+"category": "no_title_paraphrase",
+"difficulty": "hard",
+"gold_titles": ["ConcurrentHashMap 原理"],
+"gold_keywords": ["CAS", "synchronized", "桶", "并发读写", "扩容"],
+"gold_answer": "该并发 Map 通过 CAS、局部 synchronized、桶级结构以及并发扩容等机制协调读写，从而在保证线程安全的同时减少全局锁竞争。",
+"answerable": true
+},
+{
+"id": "NTP-004",
+"query": "一个线程改了共享变量，另一个线程什么时候一定能看见？我想弄清 volatile 为什么和执行先后关系有关。",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["Java 内存模型 (JMM)"],
+"gold_keywords": ["happens-before", "volatile", "可见性", "有序性"],
+"gold_answer": "这属于 JMM 的可见性与有序性问题，可通过 happens-before 规则理解；volatile 能建立特定的可见性和顺序保证。",
+"answerable": true
+},
+{
+"id": "NTP-005",
+"query": "Java 程序运行时，对象、每个线程的方法调用信息以及类元数据分别大致放在哪些区域？",
+"category": "no_title_paraphrase",
+"difficulty": "easy",
+"gold_titles": ["JVM 内存模型"],
+"gold_keywords": ["堆", "虚拟机栈", "方法区", "元空间", "运行时数据区"],
+"gold_answer": "对象通常与堆相关，每个线程的方法调用信息与虚拟机栈相关，类元数据则与方法区或元空间相关。",
+"answerable": true
+},
+{
+"id": "NTP-006",
+"query": "我需要一种能支持公平获取、等待条件以及可中断获取的互斥方案；它和直接给方法加内置监视器相比有什么选择空间？",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["synchronized 与 Lock 的区别"],
+"gold_keywords": ["显式锁", "Condition", "可中断", "公平锁", "内置锁"],
+"gold_answer": "显式 Lock 提供 Condition、可中断获取和公平锁等更灵活能力；synchronized 属于内置锁，语法更直接，适用场景取决于所需控制能力。",
+"answerable": true
+},
+{
+"id": "NTP-007",
+"query": "为什么一个新的 Web 项目加上常用依赖后，很多组件不用自己逐个声明就能工作？配置文件和依赖注入又分别起什么作用？",
+"category": "no_title_paraphrase",
+"difficulty": "easy",
+"gold_titles": ["Spring Boot 快速入门"],
+"gold_keywords": ["自动配置", "Starter", "依赖注入", "配置文件"],
+"gold_answer": "Spring Boot 通过 Starter 简化依赖组合，并利用自动配置减少手工 Bean 声明；依赖注入负责组件装配，配置文件用于提供应用参数。",
+"answerable": true
+},
+{
+"id": "NTP-008",
+"query": "浏览器请求进入 Web 框架后，是谁先接住请求，又怎样找到真正的控制器方法并把结果变成最终响应？",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["SpringMVC 请求处理流程"],
+"gold_keywords": ["DispatcherServlet", "HandlerMapping", "HandlerAdapter", "ViewResolver"],
+"gold_answer": "请求先由 DispatcherServlet 统一接收，再通过 HandlerMapping 定位处理器，由 HandlerAdapter 调用，之后根据返回结果继续完成视图解析或响应生成。",
+"answerable": true
+},
+{
+"id": "NTP-009",
+"query": "如果系统需要把热点数据放在内存里降低数据库压力，还希望设置键的失效时间并使用多种数据结构，应该关注哪类组件能力？",
+"category": "no_title_paraphrase",
+"difficulty": "easy",
+"gold_titles": ["Redis"],
+"gold_keywords": ["内存键值存储", "缓存", "数据结构", "过期策略"],
+"gold_answer": "应使用 Redis 相关能力，它提供内存键值存储、缓存、多种数据结构以及键过期策略。",
+"answerable": true
+},
+{
+"id": "NTP-010",
+"query": "订单服务不想同步等待下游处理，希望先把消息发出去，再由不同消费者按路由规则异步处理，这背后通常涉及哪些概念？",
+"category": "no_title_paraphrase",
+"difficulty": "easy",
+"gold_titles": ["RabbitMQ"],
+"gold_keywords": ["消息队列", "交换机", "路由键", "队列", "消费者", "异步解耦"],
+"gold_answer": "这属于消息队列场景，核心概念包括交换机、路由键、队列和消费者，可用于服务之间的异步解耦。",
+"answerable": true
+},
+{
+"id": "NTP-011",
+"query": "我想系统复习时间复杂度、排序查找、图以及动态规划，这些内容应归到哪一块基础知识？",
+"category": "no_title_paraphrase",
+"difficulty": "easy",
+"gold_titles": ["Algorithms核心原理解密"],
+"gold_keywords": ["复杂度", "排序", "查找", "图", "动态规划"],
+"gold_answer": "这些都属于常见算法与数据结构基础，包括复杂度分析、排序、查找、图算法和动态规划。",
+"answerable": true
+},
+{
+"id": "NTP-012",
+"query": "为什么微观系统在观测前可以用多种可能性描述，而测量后结果却表现得更确定？我还想理解不确定性在这里的含义。",
+"category": "no_title_paraphrase",
+"difficulty": "medium",
+"gold_titles": ["量子力学入门介绍"],
+"gold_keywords": ["量子态", "叠加", "测量", "不确定性"],
+"gold_answer": "入门层面可从量子态、叠加、测量和不确定性等概念理解：系统可由叠加态描述，而测量会得到具体结果，并受到量子不确定性的约束。",
+"answerable": true
+},
+{
+"id": "MH-001",
+"query": "我在做批量异步处理：既要把多个步骤按依赖关系串起来，又要控制底层工作线程数量、排队和过载行为。知识库里哪两部分需要一起看，分别解决什么问题？",
+"category": "multi_hop",
+"difficulty": "hard",
+"gold_titles": ["CompletableFuture 异步编程", "Java 线程池详解"],
+"gold_keywords": ["thenCompose", "异步任务组合", "核心线程", "任务队列", "拒绝策略", "执行器"],
+"gold_answer": "任务依赖与结果组合应参考 CompletableFuture，包括 thenApply/thenCompose、异常处理和执行器；底层并发资源控制则参考线程池，包括核心/最大线程、任务队列和拒绝策略。",
+"answerable": true
+},
+{
+"id": "MH-002",
+"query": "一个任务在线程 A 中写入共享状态，随后交给线程 B 继续处理。我既关心任务怎么被线程资源调度，也关心 B 何时能可靠看到 A 的修改，应该组合哪些知识解释？",
+"category": "multi_hop",
+"difficulty": "hard",
+"gold_titles": ["Java 线程池详解", "Java 内存模型 (JMM)"],
+"gold_keywords": ["线程池", "任务调度", "happens-before", "volatile", "可见性"],
+"gold_answer": "线程池部分解释任务如何在线程资源、队列和执行策略中被调度；JMM 则解释跨线程修改的可见性和有序性，可通过 happens-before、volatile 等规则判断何时能可靠观察到写入。",
+"answerable": true
+},
+{
+"id": "MH-003",
+"query": "异步链里有多个阶段，其中某一步需要访问共享临界区，还要支持条件等待或可中断获取；我该怎样把异步编排和互斥控制两块知识结合起来？",
+"category": "multi_hop",
+"difficulty": "hard",
+"gold_titles": ["CompletableFuture 异步编程", "synchronized 与 Lock 的区别"],
+"gold_keywords": ["异步任务组合", "异常处理", "Condition", "可中断", "显式锁"],
+"gold_answer": "异步阶段之间的依赖、组合和异常传播可由 CompletableFuture 组织；进入共享临界区时，再根据需求选用 synchronized 或 Lock，若需要 Condition、可中断或公平获取则显式 Lock 更灵活。",
+"answerable": true
+},
+{
+"id": "MH-004",
+"query": "高并发 Map 能安全读写是一回事，线程之间能否看到彼此更新又是另一回事。要从实现机制和语言层内存语义两个层面解释，分别需要哪些文档？",
+"category": "multi_hop",
+"difficulty": "hard",
+"gold_titles": ["ConcurrentHashMap 原理", "Java 内存模型 (JMM)"],
+"gold_keywords": ["CAS", "synchronized", "并发读写", "happens-before", "可见性", "有序性"],
+"gold_answer": "ConcurrentHashMap 文档用于解释 CAS、局部同步、桶与扩容等并发实现机制；JMM 文档用于解释 happens-before、volatile、可见性与有序性等语言层内存语义。",
+"answerable": true
+},
+{
+"id": "MH-005",
+"query": "我想做一个并发批处理器：固定一组工作线程消费任务，同时把处理中间状态放到一个可并发访问的 Map 里。资源调度和共享容器两个问题分别应参考什么？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Java 线程池详解", "ConcurrentHashMap 原理"],
+"gold_keywords": ["核心线程", "任务队列", "拒绝策略", "CAS", "并发读写", "线程安全"],
+"gold_answer": "工作线程数量、队列和过载策略应由线程池知识解决；并发共享状态的 Map 则应参考 ConcurrentHashMap 的 CAS、同步、桶结构和线程安全读写机制。",
+"answerable": true
+},
+{
+"id": "MH-006",
+"query": "有人把“volatile 保证可见性”和“对象通常分配在堆里”混成同一层概念。怎样用知识库中的两篇内容把这两件事分清？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Java 内存模型 (JMM)", "JVM 内存模型"],
+"gold_keywords": ["volatile", "可见性", "happens-before", "堆", "虚拟机栈", "元空间"],
+"gold_answer": "volatile 的可见性和 happens-before 属于 JMM 的并发内存语义；堆、虚拟机栈、方法区或元空间则属于 JVM 运行时数据区与内存分配，两者关注层次不同。",
+"answerable": true
+},
+{
+"id": "MH-007",
+"query": "一个最小 Spring Web 应用从“为什么很多组件能自动装配”到“一次请求怎样定位并调用控制器”，需要把哪两部分知识串起来？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Spring Boot 快速入门", "SpringMVC 请求处理流程"],
+"gold_keywords": ["自动配置", "Starter", "依赖注入", "DispatcherServlet", "HandlerMapping", "HandlerAdapter"],
+"gold_answer": "Spring Boot 文档解释 Starter、自动配置、依赖注入和配置文件如何搭起应用；SpringMVC 文档解释请求进入后由 DispatcherServlet、HandlerMapping、HandlerAdapter 等组件完成处理。",
+"answerable": true
+},
+{
+"id": "MH-008",
+"query": "我想让一个 Spring 服务接收 HTTP 请求后尽快返回，再把耗时工作交给消息系统异步处理。知识库中应用搭建和消息解耦分别该查哪里？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Spring Boot 快速入门", "RabbitMQ"],
+"gold_keywords": ["基本 Web 应用", "依赖注入", "消息队列", "交换机", "路由键", "消费者", "异步解耦"],
+"gold_answer": "Spring Boot 文档用于应用搭建、自动配置和依赖注入；RabbitMQ 文档用于通过交换机、路由键、队列和消费者实现耗时任务的异步解耦。",
+"answerable": true
+},
+{
+"id": "MH-009",
+"query": "电商系统里，商品热点数据想快速读，订单后续处理又不想阻塞主链路。若分别采用内存缓存和消息队列，知识库里要联合召回哪两篇？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Redis", "RabbitMQ"],
+"gold_keywords": ["缓存", "过期策略", "内存键值存储", "消息队列", "消费者", "异步解耦"],
+"gold_answer": "热点数据快速读取应参考 Redis 的内存缓存、数据结构和过期策略；订单后续异步处理应参考 RabbitMQ 的消息队列、路由和消费者机制。",
+"answerable": true
+},
+{
+"id": "MH-010",
+"query": "做一个高并发服务时，我既要判断某种查找方案的复杂度，又要选择能让多个线程安全访问的映射结构。理论分析和并发实现分别应查哪些资料？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["Algorithms核心原理解密", "ConcurrentHashMap 原理"],
+"gold_keywords": ["复杂度", "查找", "数据结构", "CAS", "并发读写", "线程安全"],
+"gold_answer": "复杂度、查找和通用数据结构分析应参考算法文档；多线程安全映射的具体实现则参考 ConcurrentHashMap 的 CAS、同步、桶和并发扩容机制。",
+"answerable": true
+},
+{
+"id": "MH-011",
+"query": "如果我要写一段关于“未来数字基础设施既要更智能，也要让关键数据保存更久”的综述，目录里哪两篇报道提供这两个不同侧面的材料？",
+"category": "multi_hop",
+"difficulty": "medium",
+"gold_titles": ["14版-当AI遇见下一代网络（科技大观）", "14版-最小二维码数据存千年（创新汇）"],
+"gold_keywords": ["AI", "下一代网络", "技术趋势", "二维码", "数据存储寿命"],
+"gold_answer": "关于智能化网络趋势应参考《14版-当AI遇见下一代网络（科技大观）》；关于超长期数据保存应参考《14版-最小二维码数据存千年（创新汇）》。",
+"answerable": true
+},
+{
+"id": "MH-012",
+"query": "想说明西部陆海新通道建设既包含实体交通基础设施推进，也包含金融机构对区域开放的支持，目录里哪两篇材料可以拼出这两个方面？",
+"category": "multi_hop",
+"difficulty": "hard",
+"gold_titles": ["11版-平陆运河航道主体工程开挖完成", "08版-工行重庆市分行：金融支持西部陆海新通道建设服务重庆高水平对外开放"],
+"gold_keywords": ["平陆运河", "工程进展", "西部陆海新通道", "金融支持", "重庆", "对外开放"],
+"gold_answer": "《11版-平陆运河航道主体工程开挖完成》提供交通基础设施工程进展，《08版-工行重庆市分行：金融支持西部陆海新通道建设服务重庆高水平对外开放》提供金融支持区域开放和通道建设的材料。",
+"answerable": true
+},
+{
+"id": "SD-001",
+"query": "我排查的是 volatile 写入后另一个线程是否能及时看到，以及哪些先后关系能建立可见性保证；这应该召回讲堆栈分区的资料，还是讲并发内存语义的资料？",
+"category": "similar_distractor",
+"difficulty": "hard",
+"gold_titles": ["Java 内存模型 (JMM)"],
+"gold_keywords": ["volatile", "happens-before", "可见性", "有序性"],
+"gold_answer": "应召回《Java 内存模型 (JMM)》；问题关注的是跨线程可见性与 happens-before，而不是 JVM 的堆、栈、元空间等运行时区域。",
+"answerable": true
+},
+{
+"id": "SD-002",
+"query": "我关心的是对象、线程栈帧和类元数据各自位于什么运行时区域，不是在问 volatile 或 happens-before。哪篇更匹配？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["JVM 内存模型"],
+"gold_keywords": ["堆", "虚拟机栈", "方法区", "元空间", "运行时数据区"],
+"gold_answer": "应召回《JVM 内存模型》，因为问题涉及堆、虚拟机栈、方法区或元空间等运行时数据区，而非 JMM 的并发可见性规则。",
+"answerable": true
+},
+{
+"id": "SD-003",
+"query": "任务堆积时我需要决定队列容量、最大工作线程以及过载后的处理方式，不是在讨论异步结果怎样串联。哪篇文档应优先？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["Java 线程池详解"],
+"gold_keywords": ["最大线程", "任务队列", "拒绝策略"],
+"gold_answer": "应优先召回《Java 线程池详解》，因为核心问题是线程资源、任务队列和拒绝策略，而不是 CompletableFuture 的任务组合。",
+"answerable": true
+},
+{
+"id": "SD-004",
+"query": "我已经有执行器了，现在主要想把两个异步阶段按依赖关系组合，并在链路中处理异常；不是要调核心线程数。应该看哪篇？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["CompletableFuture 异步编程"],
+"gold_keywords": ["thenApply", "thenCompose", "异常处理", "异步任务组合"],
+"gold_answer": "应召回《CompletableFuture 异步编程》，因为问题是异步阶段组合和异常处理，而非线程池参数管理。",
+"answerable": true
+},
+{
+"id": "SD-005",
+"query": "我需要的是热点数据缓存、键失效时间和多种内存数据结构，不需要交换机和路由规则。哪篇更相关？",
+"category": "similar_distractor",
+"difficulty": "easy",
+"gold_titles": ["Redis"],
+"gold_keywords": ["缓存", "数据结构", "过期策略", "内存键值存储"],
+"gold_answer": "应召回《Redis》；它覆盖内存缓存、数据结构和过期策略，而交换机、路由键属于 RabbitMQ 的消息路由范畴。",
+"answerable": true
+},
+{
+"id": "SD-006",
+"query": "我要解决的是消息从生产端经路由规则进入队列，再由消费者异步处理，不是做热点缓存。哪篇应该命中？",
+"category": "similar_distractor",
+"difficulty": "easy",
+"gold_titles": ["RabbitMQ"],
+"gold_keywords": ["交换机", "路由键", "队列", "消费者", "异步解耦"],
+"gold_answer": "应召回《RabbitMQ》，因为问题涉及交换机、路由键、队列和消费者的异步消息处理，而不是 Redis 缓存。",
+"answerable": true
+},
+{
+"id": "SD-007",
+"query": "共享临界区需要支持公平获取、可中断等待和多个条件队列；这不是在问并发 Map 的桶结构。哪篇资料更准确？",
+"category": "similar_distractor",
+"difficulty": "hard",
+"gold_titles": ["synchronized 与 Lock 的区别"],
+"gold_keywords": ["Condition", "可中断", "公平锁", "显式锁"],
+"gold_answer": "应召回《synchronized 与 Lock 的区别》，因为公平锁、可中断获取和 Condition 属于显式锁能力，而不是 ConcurrentHashMap 的内部结构。",
+"answerable": true
+},
+{
+"id": "SD-008",
+"query": "我在研究一个线程安全 Map 如何通过 CAS、局部同步和桶来支持并发读写；不是在比较两种通用互斥 API。哪篇应排前面？",
+"category": "similar_distractor",
+"difficulty": "hard",
+"gold_titles": ["ConcurrentHashMap 原理"],
+"gold_keywords": ["CAS", "synchronized", "桶", "并发读写", "扩容"],
+"gold_answer": "应优先召回《ConcurrentHashMap 原理》，因为问题针对并发 Map 的内部实现，而不是 synchronized 与 Lock 的通用差异。",
+"answerable": true
+},
+{
+"id": "SD-009",
+"query": "我想知道为什么加了常见依赖后应用能自动装配很多组件，并通过配置文件快速启动 Web 服务；不是在追踪一次请求经过哪些 MVC 组件。哪篇更对口？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["Spring Boot 快速入门"],
+"gold_keywords": ["自动配置", "Starter", "依赖注入", "配置文件"],
+"gold_answer": "应召回《Spring Boot 快速入门》，因为问题是 Starter、自动配置、依赖注入和配置文件，而非 SpringMVC 的请求分发链路。",
+"answerable": true
+},
+{
+"id": "SD-010",
+"query": "请求已经进入 Web 框架，我想追踪前端控制器如何找到处理器、由适配器调用并形成响应；不是在问自动配置。哪篇最匹配？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["SpringMVC 请求处理流程"],
+"gold_keywords": ["DispatcherServlet", "HandlerMapping", "HandlerAdapter", "ViewResolver"],
+"gold_answer": "应召回《SpringMVC 请求处理流程》，因为问题聚焦 DispatcherServlet、HandlerMapping、HandlerAdapter 和后续响应处理。",
+"answerable": true
+},
+{
+"id": "SD-011",
+"query": "我找的是 AI 与新一代通信网络结合的技术趋势，不是关于二维码介质如何把信息保存很久的报道。目录中应命中哪篇？",
+"category": "similar_distractor",
+"difficulty": "easy",
+"gold_titles": ["14版-当AI遇见下一代网络（科技大观）"],
+"gold_keywords": ["AI", "下一代网络", "技术趋势"],
+"gold_answer": "应召回《14版-当AI遇见下一代网络（科技大观）》，它讨论 AI 与下一代网络技术趋势；二维码长期存储属于另一篇报道。",
+"answerable": true
+},
+{
+"id": "SD-012",
+"query": "我想找的是银行如何服务重庆开放和西部陆海新通道建设的具体案例，不是全国层面的金融强国建设综述。哪篇更准确？",
+"category": "similar_distractor",
+"difficulty": "medium",
+"gold_titles": ["08版-工行重庆市分行：金融支持西部陆海新通道建设服务重庆高水平对外开放"],
+"gold_keywords": ["工行重庆市分行", "金融支持", "西部陆海新通道", "重庆", "对外开放"],
+"gold_answer": "应召回《08版-工行重庆市分行：金融支持西部陆海新通道建设服务重庆高水平对外开放》，因为它是具体区域和机构层面的金融支持案例。",
+"answerable": true
+},
+{
+"id": "UA-001",
+"query": "在 8 核 16 线程 CPU 上，这份知识库明确推荐的 corePoolSize 和 maximumPoolSize 分别是多少？",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要没有给出针对 8 核 16 线程 CPU 的具体线程池参数推荐值，无法据此确定。",
+"answerable": false
+},
+{
+"id": "UA-002",
+"query": "CompletableFuture 不传 Executor 时，默认公共线程池的并行度在这份资料里被设置成多少？",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要没有提供默认公共线程池并行度的具体数值，无法回答。",
+"answerable": false
+},
+{
+"id": "UA-003",
+"query": "这份资料中 ConcurrentHashMap 在 JDK 8 里的树化阈值常量精确是多少？",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要只概括了 CAS、同步、桶、扩容和线程安全，没有提供 JDK 8 树化阈值常量。",
+"answerable": false
+},
+{
+"id": "UA-004",
+"query": "volatile 写在 x86 上最终对应哪几条具体汇编指令或内存屏障指令？资料里有精确映射吗？",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要没有给出 volatile 到 x86 汇编或具体内存屏障指令的精确映射，不能据此回答。",
+"answerable": false
+},
+{
+"id": "UA-005",
+"query": "G1 收集器在 16GB 堆上会使用多大的 Region？请给出这份知识库里的精确默认值。",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要涉及 JVM 运行时数据区与内存分配，但没有提供 G1 Region 大小或其默认计算结果。",
+"answerable": false
+},
+{
+"id": "UA-006",
+"query": "Spring Boot 3.5.9 中某个自动配置类的完整条件注解列表是什么？请按源码顺序列出。",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要只介绍自动配置等入门概念，没有给出 Spring Boot 3.5.9 具体自动配置类及其源码级条件注解列表。",
+"answerable": false
+},
+{
+"id": "UA-007",
+"query": "Redis 在这套知识库对应环境中的 maxmemory-policy 当前配置值到底是什么？",
+"category": "unanswerable",
+"difficulty": "medium",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要提到过期策略和常见使用场景，但没有提供任何具体环境的 maxmemory-policy 配置值。",
+"answerable": false
+},
+{
+"id": "UA-008",
+"query": "RabbitMQ 这里的消费者 prefetch 默认被配置成多少条消息？",
+"category": "unanswerable",
+"difficulty": "medium",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要没有给出消费者 prefetch 的具体配置值，无法确定。",
+"answerable": false
+},
+{
+"id": "UA-009",
+"query": "资料里给出的普朗克常数精确数值是多少，并保留了几位有效数字？",
+"category": "unanswerable",
+"difficulty": "medium",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "量子力学摘要只覆盖量子态、叠加、测量和不确定性等入门概念，没有给出普朗克常数的精确数值。",
+"answerable": false
+},
+{
+"id": "UA-010",
+"query": "知识库明确推荐了哪三个跑鞋品牌和具体型号，分别适合体重 80kg 的跑者吗？",
+"category": "unanswerable",
+"difficulty": "medium",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "跑鞋摘要只涉及缓震、支撑、脚型、场景和尺码选择，没有提供品牌、型号或针对 80kg 跑者的具体推荐。",
+"answerable": false
+},
+{
+"id": "UA-011",
+"query": "诺曼底登陆当天盟军伤亡的精确人数是多少？请以目录文章中的数字为准。",
+"category": "unanswerable",
+"difficulty": "medium",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要只说明登陆背景、盟军行动、战役过程和历史影响，没有提供当天伤亡的精确人数。",
+"answerable": false
+},
+{
+"id": "UA-012",
+"query": "平陆运河航道主体工程开挖完成的具体日期、累计土石方开挖量和完成百分比分别是多少？",
+"category": "unanswerable",
+"difficulty": "hard",
+"gold_titles": [],
+"gold_keywords": [],
+"gold_answer": "知识库摘要仅说明平陆运河主体工程开挖完成这一进展，没有给出具体日期、累计土石方量或完成百分比。",
+"answerable": false
+}
+]

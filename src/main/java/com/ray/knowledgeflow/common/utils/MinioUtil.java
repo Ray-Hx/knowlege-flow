@@ -38,23 +38,20 @@ public class MinioUtil {
      * @return 文件访问 URL
      */
     public String uploadFile(MultipartFile file, String folder) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(400, "上传文件不能为空");
-        }
+        return uploadImage(file, folder, 10 * 1024 * 1024L);
+    }
+
+    public String uploadImage(MultipartFile file, String folder, long maxBytes) {
+        ImageUploadValidator.ImageMetadata metadata = ImageUploadValidator.validate(file, maxBytes);
 
         // 确保桶存在
         ensureBucketExists();
 
-        // 生成唯一文件名
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String objectName = folder + "/" + UUID.randomUUID() + extension;
+        // 后缀和 Content-Type 均来自服务端检测，不信任用户提交的文件名/MIME。
+        String objectName = folder + "/" + UUID.randomUUID() + metadata.extension();
 
         try (InputStream inputStream = file.getInputStream()) {
-            return uploadFile(inputStream, objectName, file.getSize(), file.getContentType());
+            return uploadFile(inputStream, objectName, file.getSize(), metadata.contentType());
         } catch (Exception e) {
             log.error("文件上传失败", e);
             throw new BusinessException(500, "文件上传失败：" + e.getMessage());

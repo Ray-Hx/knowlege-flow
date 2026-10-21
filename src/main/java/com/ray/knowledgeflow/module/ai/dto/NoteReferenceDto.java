@@ -18,4 +18,6 @@ public class NoteReferenceDto {
     private String title;
     private String snippet; // 相关片段
     private Double score; // 相似度分数
+    private String sourceType; // NOTE or CONTENT
+    private String subType; // For CONTENT: UPLOAD or FEED
 }

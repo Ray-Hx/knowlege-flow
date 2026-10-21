@@ -1,5 +1,5 @@
 <template>
-  <div class="public-profile min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-4 md:p-8 w-full">
+  <div class="public-profile h-screen bg-gradient-to-br from-indigo-50 to-purple-50 p-4 md:p-8 w-full overflow-y-auto">
     <div class="max-w-5xl mx-auto w-full">
       <!-- Header / Nav -->
       <div class="flex items-center mb-8 gap-2 cursor-pointer w-fit" @click="router.push('/community/feed')">
@@ -15,7 +15,7 @@
           <div class="md:col-span-1">
             <n-card class="glass-card text-center sticky top-8">
               <div class="relative inline-block mb-4">
-                <n-avatar round :size="120" :src="profile.avatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'" class="border-4 border-white shadow-lg" />
+                <n-avatar round :size="120" :src="profile.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'" class="border-4 border-white shadow-lg" />
               </div>
               
               <h2 class="text-2xl font-bold text-gray-800 mb-1">{{ profile.username }}</h2>
@@ -51,30 +51,57 @@
                 {{ profile.bio || '这个用户很懒，什么都没写...' }}
               </p>
 
-              <div v-if="userStore.userInfo?.id !== userId" class="flex justify-center w-full mt-4">
-                <n-button 
-                  v-if="profile.isFollowing" 
-                  secondary 
-                  type="tertiary" 
-                  round 
-                  class="w-full max-w-[200px]" 
-                  @click="handleUnfollow"
-                  :loading="followLoading"
-                >
-                  已关注
-                </n-button>
-                <n-button 
-                  v-else 
-                  type="primary" 
-                  round 
-                  class="w-full max-w-[200px]" 
-                  @click="handleFollow"
-                  :loading="followLoading"
-                >
-                  关注
-                </n-button>
-              </div>
-            </n-card>
+                <div class="flex gap-3 mt-4">
+                  <n-button 
+                    v-if="profile.isFollowing" 
+                    secondary 
+                    type="tertiary" 
+                    round 
+                    class="flex-1" 
+                    @click="handleUnfollow"
+                    :loading="followLoading"
+                  >
+                    已关注
+                  </n-button>
+                  <n-button 
+                    v-else 
+                    type="primary" 
+                    round 
+                    class="flex-1" 
+                    @click="handleFollow"
+                    :loading="followLoading"
+                  >
+                    关注
+                  </n-button>
+                  <n-button
+                    type="primary"
+                    ghost
+                    round
+                    class="flex-1"
+                    @click="router.push({ path: '/messages', query: { contactId: profile.id } })"
+                  >
+                    发私信
+                  </n-button>
+                </div>
+
+                <!-- Additional Info -->
+                <div class="mt-8 pt-6 border-t border-gray-100 text-left space-y-4">
+                  <div v-if="profile.email" class="flex items-center gap-3 text-gray-600">
+                    <n-icon size="20" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5l-8-5V6l8 5l8-5v2z"/></svg></n-icon>
+                    <span class="text-sm truncate" :title="profile.email">{{ profile.email }}</span>
+                  </div>
+                  <div v-if="profile.githubId" class="flex items-center gap-3 text-gray-600">
+                    <n-icon size="20" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33c.85 0 1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg></n-icon>
+                    <span class="text-sm">{{ profile.githubId }}</span>
+                  </div>
+                  <div v-if="profile.learningGoals" class="mt-4">
+                    <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">学习目标</div>
+                    <div class="text-sm text-gray-600 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/50 italic">
+                      "{{ profile.learningGoals }}"
+                    </div>
+                  </div>
+                </div>
+              </n-card>
           </div>
 
           <!-- Right: Public Content & Heatmap -->
@@ -178,7 +205,8 @@ const initHeatmap = (heatmapData: any[]) => {
   const startDate = echarts.format.formatTime('yyyy-MM-dd', oneYearAgo)
   const endDate = echarts.format.formatTime('yyyy-MM-dd', today)
 
-  const data = heatmapData.map(item => [item.date, item.count])
+  // const data = heatmapData.map(item => [item.date, item.count])
+  const data = heatmapData.map(item => [item.date, item.noteCount || 0])
 
   const option = {
     tooltip: {
@@ -259,8 +287,9 @@ const fetchData = async () => {
       initHeatmap(heatmapRes)
     }
 
-  } catch (e) {
-    message.error(e.message || '加载主页失败')
+  } catch (e: any) {
+    console.error('获取用户数据失败', e)
+    message.error('获取用户信息失败')
   } finally {
     loading.value = false
   }
@@ -270,9 +299,10 @@ const fetchNotes = async () => {
   try {
     const res = await getUserPublicNotes(userId.value, pagination.value.page, pagination.value.size)
     notes.value = res.records
-    pagination.value.total = res.total
-  } catch (e) {
-    message.error(e.message || '加载笔记失败')
+    pagination.value.total = res.total || 0
+  } catch (e: any) {
+    console.error('获取公开笔记失败', e)
+    message.error('加载笔记失败')
   }
 }
 
@@ -299,7 +329,7 @@ const handleFollow = async () => {
       profile.value.isFollowing = true
       profile.value.followerCount += 1
     }
-  } catch (error) {
+  } catch (error: any) {
     message.error(error.message || '关注失败')
   } finally {
     followLoading.value = false
@@ -315,8 +345,8 @@ const handleUnfollow = async () => {
       profile.value.isFollowing = false
       profile.value.followerCount = Math.max(0, profile.value.followerCount - 1)
     }
-  } catch (error) {
-    message.error(error.message || '操作失败')
+  } catch (error: any) {
+    message.error(error.message || '取消关注失败')
   } finally {
     followLoading.value = false
   }

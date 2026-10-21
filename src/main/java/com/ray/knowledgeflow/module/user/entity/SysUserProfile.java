@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
  * @since 2024-01-14
  */
 @Data
-@TableName("sys_user_profile")
+@TableName(value = "sys_user_profile", autoResultMap = true)
 public class SysUserProfile implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -49,11 +49,13 @@ public class SysUserProfile implements Serializable {
     /**
      * 用户偏好设置 (JSON)
      */
-    private String preferences;
+    @TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
+    private com.ray.knowledgeflow.module.user.dto.UserSettingsDto preferences;
 
     /**
      * 学习目标 (JSON)
      */
+    @com.baomidou.mybatisplus.annotation.TableField(typeHandler = com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler.class)
     private String learningGoals;
 
     /**

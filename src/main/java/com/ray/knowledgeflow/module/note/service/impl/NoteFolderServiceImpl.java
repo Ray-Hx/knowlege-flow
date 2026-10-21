@@ -9,6 +9,7 @@ import com.ray.knowledgeflow.module.note.entity.NoteFolder;
 import com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper;
 import com.ray.knowledgeflow.module.note.mapper.NoteFolderMapper;
 import com.ray.knowledgeflow.module.note.service.INoteFolderService;
+import com.ray.knowledgeflow.module.note.service.INoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -16,6 +17,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -31,6 +37,7 @@ public class NoteFolderServiceImpl implements INoteFolderService {
 
     private final NoteFolderMapper folderMapper;
     private final NoteEntryMapper noteEntryMapper;
+    private final INoteService noteService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -48,7 +55,11 @@ public class NoteFolderServiceImpl implements INoteFolderService {
         NoteFolder folder = new NoteFolder();
         folder.setUserId(userId);
         folder.setName(dto.getName());
-        folder.setParentId(dto.getParentId() != null ? dto.getParentId() : 0L);
+        Long parentId = dto.getParentId() != null ? dto.getParentId() : 0L;
+        if (parentId > 0) {
+            getAndCheckOwnership(userId, parentId);
+        }
+        folder.setParentId(parentId);
         folder.setSortOrder(dto.getSortOrder() != null ? dto.getSortOrder() : 0);
 
         folderMapper.insert(folder);
@@ -78,16 +89,28 @@ public class NoteFolderServiceImpl implements INoteFolderService {
     public void deleteFolder(Long userId, Long folderId) {
         getAndCheckOwnership(userId, folderId);
 
-        // 递归删除子文件夹
-        deleteSubFolders(userId, folderId);
+        // 一次加载目录树，避免递归查询 N+1；用后序列表保证先删子目录。
+        List<NoteFolder> allFolders = folderMapper.selectList(new LambdaQueryWrapper<NoteFolder>()
+                .select(NoteFolder::getId, NoteFolder::getParentId)
+                .eq(NoteFolder::getUserId, userId));
+        Map<Long, List<Long>> children = new HashMap<>();
+        for (NoteFolder folder : allFolders) {
+            children.computeIfAbsent(folder.getParentId(), ignored -> new ArrayList<>()).add(folder.getId());
+        }
+        List<Long> folderIds = new ArrayList<>();
+        collectPostOrder(folderId, children, new HashSet<>(), folderIds);
 
-        // 删除该文件夹下的所有笔记
-        noteEntryMapper.delete(new LambdaQueryWrapper<NoteEntry>()
+        List<NoteEntry> notes = noteEntryMapper.selectList(new LambdaQueryWrapper<NoteEntry>()
+                .select(NoteEntry::getId)
                 .eq(NoteEntry::getUserId, userId)
-                .eq(NoteEntry::getFolderId, folderId));
-
-        // 删除文件夹
-        folderMapper.deleteById(folderId);
+                .in(NoteEntry::getFolderId, folderIds));
+        // 通过笔记完整删除链路清理版本、附件、链接并发布 ES/Qdrant/Neo4j 删除事件。
+        for (NoteEntry note : notes) {
+            noteService.deleteNote(userId, note.getId());
+        }
+        for (Long id : folderIds) {
+            folderMapper.deleteById(id);
+        }
     }
 
     @Override
@@ -135,18 +158,18 @@ public class NoteFolderServiceImpl implements INoteFolderService {
         return folder;
     }
 
-    private void deleteSubFolders(Long userId, Long parentId) {
-        List<NoteFolder> subFolders = folderMapper.selectList(new LambdaQueryWrapper<NoteFolder>()
-                .eq(NoteFolder::getUserId, userId)
-                .eq(NoteFolder::getParentId, parentId));
-
-        for (NoteFolder subFolder : subFolders) {
-            deleteSubFolders(userId, subFolder.getId());
-            noteEntryMapper.delete(new LambdaQueryWrapper<NoteEntry>()
-                    .eq(NoteEntry::getUserId, userId)
-                    .eq(NoteEntry::getFolderId, subFolder.getId()));
-            folderMapper.deleteById(subFolder.getId());
+    private void collectPostOrder(
+            Long folderId,
+            Map<Long, List<Long>> children,
+            Set<Long> visited,
+            List<Long> result) {
+        if (!visited.add(folderId)) {
+            throw new BusinessException(409, "文件夹层级存在循环，无法安全删除");
         }
+        for (Long childId : children.getOrDefault(folderId, List.of())) {
+            collectPostOrder(childId, children, visited, result);
+        }
+        result.add(folderId);
     }
 
     private NoteFolderDto toDto(NoteFolder folder) {

@@ -7,6 +7,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
@@ -18,6 +20,8 @@ import java.util.Map;
  */
 @Slf4j
 public class HttpClientUtil {
+
+    private static final int MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 
     private static final HttpClient HTTP_CLIENT = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_2)
@@ -58,13 +62,7 @@ public class HttpClientUtil {
 
         log.debug("发送GET请求: {}", url);
 
-        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() >= 200 && response.statusCode() < 300) {
-            return response.body();
-        } else {
-            throw new RuntimeException("HTTP请求失败: " + response.statusCode() + ", " + response.body());
-        }
+        return sendForString(request);
     }
 
     /**
@@ -103,12 +101,20 @@ public class HttpClientUtil {
 
         log.debug("发送POST请求: {}", url);
 
-        HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+        return sendForString(request);
+    }
 
-        if (response.statusCode() >= 200 && response.statusCode() < 300) {
-            return response.body();
-        } else {
-            throw new RuntimeException("HTTP请求失败: " + response.statusCode() + ", " + response.body());
+    private static String sendForString(HttpRequest request) throws Exception {
+        HttpResponse<InputStream> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try (InputStream body = response.body()) {
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new RuntimeException("HTTP请求失败: " + response.statusCode());
+            }
+            byte[] bytes = body.readNBytes(MAX_RESPONSE_BYTES + 1);
+            if (bytes.length > MAX_RESPONSE_BYTES) {
+                throw new RuntimeException("HTTP响应超过 5MB 限制");
+            }
+            return new String(bytes, StandardCharsets.UTF_8);
         }
     }
 }

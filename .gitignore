@@ -54,3 +54,15 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env
 frontend/.env.local
+
+# 本地重排服务
+reranker-service/.venv/
+reranker-service/__pycache__/
+
+# 本地生成文件
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# 独立管理的本地学习指南站点仓库
+/study-guide-site/

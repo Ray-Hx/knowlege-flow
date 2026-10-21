@@ -9,8 +9,10 @@ import com.ray.knowledgeflow.module.note.entity.NoteEntry;
 import com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper;
 import com.ray.knowledgeflow.module.spaced.entity.SpacedReview;
 import com.ray.knowledgeflow.module.spaced.mapper.SpacedReviewMapper;
+import com.ray.knowledgeflow.module.ai.message.AiProcessProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.*;
@@ -29,13 +31,18 @@ import java.util.stream.Collectors;
 public class DashboardServiceImpl implements IDashboardService {
 
         private final NoteEntryMapper noteMapper;
+        private final com.ray.knowledgeflow.module.note.mapper.NoteVersionMapper versionMapper;
         private final SpacedReviewMapper reviewMapper;
+        private final com.ray.knowledgeflow.module.spaced.mapper.SpacedLogMapper spacedLogMapper;
+        private final AiProcessProducer aiProcessProducer;
+        private final StringRedisTemplate redisTemplate;
 
         @Override
         public DashboardStatsDto getStats(Long userId) {
                 // 总笔记数
                 Long totalNotes = noteMapper.selectCount(
                                 new LambdaQueryWrapper<NoteEntry>()
+                                                .select(NoteEntry::getId, NoteEntry::getCreatedTime)
                                                 .eq(NoteEntry::getUserId, userId)
                                                 .eq(NoteEntry::getDeleted, 0));
 
@@ -180,28 +187,77 @@ public class DashboardServiceImpl implements IDashboardService {
         public List<DailyStudyDto> getYearlyHeatmap(Long userId) {
                 LocalDate today = LocalDate.now();
                 LocalDate yearStart = today.minusDays(364);
+                LocalDateTime yearStartDateTime = yearStart.atStartOfDay();
 
-                // 查询过去365天的笔记
+                // 1. 获取所有笔记的创建时间
                 List<NoteEntry> notes = noteMapper.selectList(
                                 new LambdaQueryWrapper<NoteEntry>()
                                                 .eq(NoteEntry::getUserId, userId)
                                                 .eq(NoteEntry::getDeleted, 0)
-                                                .ge(NoteEntry::getCreatedTime, yearStart.atStartOfDay()));
+                                                .ge(NoteEntry::getCreatedTime, yearStartDateTime));
 
-                // 按日期分组统计
-                Map<LocalDate, Long> dailyNotes = notes.stream()
-                                .filter(n -> n.getCreatedTime() != null)
-                                .collect(Collectors.groupingBy(
-                                                n -> n.getCreatedTime().toLocalDate(),
-                                                Collectors.counting()));
+                // 2. 获取所有笔记的编辑时间 (通过 NoteVersion)
+                // 先获取用户所有笔记 ID
+                List<NoteEntry> allUserNotes = noteMapper.selectList(
+                                new LambdaQueryWrapper<NoteEntry>()
+                                                .select(NoteEntry::getId)
+                                                .eq(NoteEntry::getUserId, userId)
+                                                .eq(NoteEntry::getDeleted, 0));
+                List<Long> noteIds = allUserNotes.stream().map(NoteEntry::getId).collect(Collectors.toList());
 
-                // 生成365天数据
+                List<com.ray.knowledgeflow.module.note.entity.NoteVersion> versions = new ArrayList<>();
+                if (!noteIds.isEmpty()) {
+                        versions = versionMapper.selectList(
+                                        new LambdaQueryWrapper<com.ray.knowledgeflow.module.note.entity.NoteVersion>()
+                                                        .select(
+                                                                        com.ray.knowledgeflow.module.note.entity.NoteVersion::getNoteId,
+                                                                        com.ray.knowledgeflow.module.note.entity.NoteVersion::getCreatedTime)
+                                                        .in(com.ray.knowledgeflow.module.note.entity.NoteVersion::getNoteId,
+                                                                        noteIds)
+                                                        .ge(com.ray.knowledgeflow.module.note.entity.NoteVersion::getCreatedTime,
+                                                                        yearStartDateTime));
+                }
+
+                // 3. 获取复习时间 (通过 SpacedLog)
+                List<com.ray.knowledgeflow.module.spaced.entity.SpacedLog> logs = spacedLogMapper.selectList(
+                                new LambdaQueryWrapper<com.ray.knowledgeflow.module.spaced.entity.SpacedLog>()
+                                                .select(
+                                                                com.ray.knowledgeflow.module.spaced.entity.SpacedLog::getNoteId,
+                                                                com.ray.knowledgeflow.module.spaced.entity.SpacedLog::getReviewTime)
+                                                .eq(com.ray.knowledgeflow.module.spaced.entity.SpacedLog::getUserId,
+                                                                userId)
+                                                .ge(com.ray.knowledgeflow.module.spaced.entity.SpacedLog::getReviewTime,
+                                                                yearStartDateTime));
+
+                // 聚合所有日期数据
+                Map<LocalDate, Set<String>> dailyActivityMap = new HashMap<>();
+
+                // 统计创建 (Type: CREATE)
+                for (NoteEntry n : notes) {
+                        LocalDate date = n.getCreatedTime().toLocalDate();
+                        dailyActivityMap.computeIfAbsent(date, k -> new HashSet<>()).add(n.getId().toString());
+                }
+
+                // 统计编辑 (Type: EDIT)
+                for (com.ray.knowledgeflow.module.note.entity.NoteVersion v : versions) {
+                        LocalDate date = v.getCreatedTime().toLocalDate();
+                        dailyActivityMap.computeIfAbsent(date, k -> new HashSet<>()).add(v.getNoteId().toString());
+                }
+
+                // 统计复习 (Type: REVIEW)
+                for (com.ray.knowledgeflow.module.spaced.entity.SpacedLog l : logs) {
+                        LocalDate date = l.getReviewTime().toLocalDate();
+                        dailyActivityMap.computeIfAbsent(date, k -> new HashSet<>()).add(l.getNoteId().toString());
+                }
+
+                // 生成 365 天数据
                 List<DailyStudyDto> result = new ArrayList<>();
                 for (int i = 364; i >= 0; i--) {
                         LocalDate date = today.minusDays(i);
+                        int activityCount = dailyActivityMap.getOrDefault(date, Collections.emptySet()).size();
                         result.add(DailyStudyDto.builder()
                                         .date(date.toString())
-                                        .noteCount(dailyNotes.getOrDefault(date, 0L).intValue())
+                                        .noteCount(activityCount)
                                         .build());
                 }
                 return result;
@@ -209,20 +265,24 @@ public class DashboardServiceImpl implements IDashboardService {
 
         @Override
         public List<com.ray.knowledgeflow.module.dashboard.dto.TagStatsDto> getTagDistribution(Long userId) {
-                // 查询用户所有笔记的标签字段（逗号分隔）
+                // 查询用户所有笔记
                 List<NoteEntry> notes = noteMapper.selectList(
                                 new LambdaQueryWrapper<NoteEntry>()
+                                                .select(NoteEntry::getTags)
                                                 .eq(NoteEntry::getUserId, userId)
-                                                .eq(NoteEntry::getDeleted, 0)
-                                                .isNotNull(NoteEntry::getTags)
-                                                .ne(NoteEntry::getTags, ""));
+                                                .eq(NoteEntry::getDeleted, 0));
 
                 // 解析所有标签，统计词频
                 Map<String, Integer> tagCountMap = new java.util.HashMap<>();
+                int uncategorizedCount = 0;
+
                 for (NoteEntry note : notes) {
-                        if (note.getTags() == null || note.getTags().isBlank())
+                        if (note.getTags() == null || note.getTags().isBlank()) {
+                                uncategorizedCount++;
                                 continue;
-                        String[] tags = note.getTags().split("[,，]");
+                        }
+                        // 支持多种分隔符：逗号、分号、空格
+                        String[] tags = note.getTags().split("[,，;；\\s]+");
                         for (String tag : tags) {
                                 String t = tag.trim();
                                 if (!t.isEmpty()) {
@@ -232,7 +292,7 @@ public class DashboardServiceImpl implements IDashboardService {
                 }
 
                 // 取 Top 10，按数量降序
-                return tagCountMap.entrySet().stream()
+                List<com.ray.knowledgeflow.module.dashboard.dto.TagStatsDto> result = tagCountMap.entrySet().stream()
                                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                                 .limit(10)
                                 .map(e -> com.ray.knowledgeflow.module.dashboard.dto.TagStatsDto.builder()
@@ -240,6 +300,19 @@ public class DashboardServiceImpl implements IDashboardService {
                                                 .noteCount(e.getValue())
                                                 .build())
                                 .collect(Collectors.toList());
+
+                // 如果有未分类的笔记，且结果集不满 10 个，或者未分类占比很高，可以加入（这里简单处理：始终加入，如果 count > 0）
+                if (uncategorizedCount > 0) {
+                        // 自动触发一次同步（带频率限制）
+                        triggerAutomaticSync(userId);
+
+                        result.add(com.ray.knowledgeflow.module.dashboard.dto.TagStatsDto.builder()
+                                        .tag("未分类")
+                                        .noteCount(uncategorizedCount)
+                                        .build());
+                }
+
+                return result;
         }
 
         @Override
@@ -250,6 +323,7 @@ public class DashboardServiceImpl implements IDashboardService {
 
                 List<NoteEntry> notes = noteMapper.selectList(
                                 new LambdaQueryWrapper<NoteEntry>()
+                                                .select(NoteEntry::getCreatedTime)
                                                 .eq(NoteEntry::getUserId, userId)
                                                 .eq(NoteEntry::getDeleted, 0)
                                                 .ge(NoteEntry::getCreatedTime, start.atStartOfDay()));
@@ -273,5 +347,49 @@ public class DashboardServiceImpl implements IDashboardService {
                                         .build());
                 }
                 return result;
+        }
+
+        @Override
+        public void syncAiTags(Long userId) {
+                String dispatchKey = "dashboard:sync:tags:dispatch:" + userId;
+                Boolean acquired = redisTemplate.opsForValue()
+                                .setIfAbsent(dispatchKey, "1", Duration.ofMinutes(10));
+                if (!Boolean.TRUE.equals(acquired)) {
+                        log.info("用户 {} 的 AI 标签同步仍在冷却期，跳过重复投递", userId);
+                        return;
+                }
+                // 查询该用户所有没有标签的笔记
+                List<NoteEntry> notes = noteMapper.selectList(
+                                new LambdaQueryWrapper<NoteEntry>()
+                                                .select(NoteEntry::getId, NoteEntry::getTitle,
+                                                                NoteEntry::getContentMd)
+                                                .eq(NoteEntry::getUserId, userId)
+                                                .eq(NoteEntry::getDeleted, 0)
+                                                .and(w -> w.isNull(NoteEntry::getTags).or().eq(NoteEntry::getTags,
+                                                                ""))
+                                                .orderByAsc(NoteEntry::getId)
+                                                .last("LIMIT 100"));
+
+                log.info("用户 {} 开始同步 AI 标签，待处理笔记数: {}", userId, notes.size());
+
+                for (NoteEntry note : notes) {
+                        aiProcessProducer.sendTagExtractionTask(
+                                        note.getId(),
+                                        userId,
+                                        note.getTitle(),
+                                        note.getContentMd());
+                }
+        }
+
+        private void triggerAutomaticSync(Long userId) {
+                String syncKey = "dashboard:sync:tags:" + userId;
+                // 每 10 分钟最多触发一次自动同步 (原来是 1 小时，为了提高及时性缩短)
+                Boolean success = redisTemplate.opsForValue()
+                                .setIfAbsent(syncKey, "1", Duration.ofMinutes(10));
+
+                if (Boolean.TRUE.equals(success)) {
+                        log.info("触发用户 {} 的自动 AI 标签同步", userId);
+                        syncAiTags(userId);
+                }
         }
 }

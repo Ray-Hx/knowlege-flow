@@ -6,8 +6,11 @@ import lombok.Data;
 public class UserPublicProfileDto {
     private Long id;
     private String username;
+    private String email;
     private String avatar;
     private String bio;
+    private String githubId;
+    private String learningGoals;
     private Long publicNoteCount;
     private Long totalViews;
     private Long totalLikes;

@@ -1,4 +1,26 @@
 # KnowledgeFlow Docker Compose 配置文件
+#
+# ── 按需启动 ────────────────────────────────────────────────
+# 全套中间件约占 4.5GB 内存，日常开发没必要全开。
+#
+#   docker compose up -d                    核心: MySQL + Redis + RabbitMQ (~650MB)
+#   docker compose --profile rag up -d      + Qdrant，调 RAG / 重排
+#   docker compose --profile search up -d   + Elasticsearch，调搜索
+#   docker compose --profile graph up -d    + Neo4j，调知识图谱
+#   docker compose --profile storage up -d  + MinIO，调文件上传
+#   docker compose --profile full up -d     全套，演示或联调用
+#
+# profile 可叠加: docker compose --profile rag --profile search up -d
+# 停单个服务:     docker compose stop neo4j
+#
+# 为什么 RabbitMQ 属于核心而非可选：
+#   内容抓取、AI 增强和向量索引都通过 MQ 处理。短暂投递失败
+#   不会回滚已保存的笔记，但对应的异步能力会延迟，需从 DLQ/重建任务补偿。
+#
+# reranker 容器单独用 --profile rerank 启动，且不含在 full 里：
+#   macOS 上 Docker 无法直通 GPU，本机开发请用 reranker-service/ 下的原生服务；
+#   该容器是给有 NVIDIA 卡的部署环境准备的。
+# ────────────────────────────────────────────────────────────
 
 # 自定义网络
 networks:
@@ -13,8 +35,11 @@ volumes:
   elasticsearch-data:
   neo4j-data:
   qdrant-data:
-  minio-data:
+  # 卷名带 -new 是历史原因：旧卷 minio-data 里残留着已废弃的凭据，
+  # 换新卷名以确保 MINIO_ROOT_USER/PASSWORD 能重新初始化生效
+  minio-data-new:
   rabbitmq-data:
+  reranker-data:
 
 
 services:
@@ -73,6 +98,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
     container_name: knowledge-flow-elasticsearch
     restart: unless-stopped
+    profiles: [ "search", "full" ]
     environment:
       - discovery.type=single-node
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
@@ -100,6 +126,7 @@ services:
     image: neo4j:5.15.0
     container_name: knowledge-flow-neo4j
     restart: unless-stopped
+    profiles: [ "graph", "full" ]
     environment:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-neo4j_password}
       NEO4J_dbms_memory_pagecache_size: 512M
@@ -127,6 +154,7 @@ services:
     image: qdrant/qdrant:latest
     container_name: knowledge-flow-qdrant
     restart: unless-stopped
+    profiles: [ "rag", "full" ]
     ports:
       - "${QDRANT_PORT:-6333}:6333"
       - "6334:6334"
@@ -145,6 +173,7 @@ services:
     image: minio/minio:latest
     container_name: knowledge-flow-minio
     restart: unless-stopped
+    profiles: [ "storage", "full" ]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
@@ -152,7 +181,7 @@ services:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - minio-data:/data
+      - minio-data-new:/data
     command: server /data --console-address ":9001"
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
@@ -162,6 +191,27 @@ services:
       start_period: 30s
     networks:
       - knowledge-flow-network
+
+  # MinIO 初始化脚本 (全自动建桶 + 设权限)
+  minio-init:
+    image: minio/mc:latest
+    container_name: knowledge-flow-minio-init
+    profiles: [ "storage", "full" ]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin};
+      /usr/bin/mc mb myminio/knowledge-flow --ignore-existing;
+      /usr/bin/mc anonymous set public myminio/knowledge-flow;
+      echo 'Bucket created and public policy set!';
+      exit 0;
+      "
+    networks:
+      - knowledge-flow-network
+
+
 
   # RabbitMQ 3.x - 消息队列
   rabbitmq:
@@ -183,5 +233,27 @@ services:
       timeout: 10s
       retries: 5
       start_period: 40s
+    networks:
+      - knowledge-flow-network
+
+  # 交叉编码器重排服务 (HuggingFace Text Embeddings Inference)
+  # RAG 精排阶段使用。默认 profile 不启动，需要时: docker compose --profile rerank up -d
+  # 无 GPU 时可改用 CPU 镜像 ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+  reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.5
+    container_name: knowledge-flow-reranker
+    restart: unless-stopped
+    profiles: [ "rerank" ]
+    command: [ "--model-id", "BAAI/bge-reranker-v2-m3" ]
+    ports:
+      - "${RERANK_PORT:-8081}:80"
+    volumes:
+      - reranker-data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
     networks:
       - knowledge-flow-network

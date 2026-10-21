@@ -5,7 +5,6 @@ import com.ray.knowledgeflow.module.search.message.IndexUpdateConsumer;
 import com.ray.knowledgeflow.module.search.message.IndexUpdateMessage;
 import com.ray.knowledgeflow.module.search.service.EmbeddingService;
 import com.ray.knowledgeflow.module.search.service.impl.SearchServiceImpl;
-import com.ray.knowledgeflow.module.search.service.impl.SearchServiceImpl;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -74,6 +73,7 @@ public class RagFlowTest {
                 message.setDocumentId(100L);
                 message.setDocumentType("CONTENT_ITEM");
                 message.setAction("CREATE");
+                message.setUserId(7L);
                 message.setTitle("RAG Test Document");
                 message.setContent("This is a test content for RAG flow verification.");
 
@@ -106,12 +106,13 @@ public class RagFlowTest {
                 // Mock Database Layer (ContentItemMapper)
                 ContentItem mockItem = new ContentItem();
                 mockItem.setId(100L);
+                mockItem.setUserId(7L);
                 mockItem.setTitle("RAG Test Document");
                 when(contentItemMapper.selectList(any())).thenReturn(List.of(mockItem));
 
                 // Action: Search
                 org.springframework.data.domain.Page<com.ray.knowledgeflow.module.content.dto.ContentItemDto> results = searchService
-                                .searchContentSemantic("test query", null, 0, 10);
+                                .searchContentSemantic("test query", 7L, 0, 10);
 
                 // Verify
                 org.junit.jupiter.api.Assertions.assertFalse(results.isEmpty());

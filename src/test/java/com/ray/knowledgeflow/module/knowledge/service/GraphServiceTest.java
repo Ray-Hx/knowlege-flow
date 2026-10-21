@@ -1,95 +1,108 @@
 package com.ray.knowledgeflow.module.knowledge.service;
 
-import com.ray.knowledgeflow.module.knowledge.entity.graph.NoteNode;
+import com.ray.knowledgeflow.module.graph.entity.NoteNode;
+import com.ray.knowledgeflow.module.graph.repository.GraphNoteRepository;
+import com.ray.knowledgeflow.module.graph.service.impl.GraphServiceImpl;
 import com.ray.knowledgeflow.module.note.entity.NoteEntry;
+import com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper;
+import com.ray.knowledgeflow.module.note.service.NoteLinkService;
+import dev.langchain4j.model.chat.ChatLanguageModel;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.neo4j.core.Neo4jTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import com.ray.knowledgeflow.common.exception.BusinessException;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+/**
+ * 当前图谱实现的回归测试。原测试依赖已删除的 knowledge.GraphService，导致整个测试集无法编译。
+ */
 @ExtendWith(MockitoExtension.class)
 class GraphServiceTest {
 
-    @Mock
-    private Neo4jTemplate neo4jTemplate;
+    @Mock private GraphNoteRepository graphRepository;
+    @Mock private NoteEntryMapper noteEntryMapper;
+    @Mock private NoteLinkService noteLinkService;
+    @Mock private ChatLanguageModel chatModel;
+    @Mock private TransactionTemplate neo4jTransactionTemplate;
 
-    @Mock
-    private LinkParserService linkParserService;
-
-    private GraphService graphService;
+    private GraphServiceImpl graphService;
 
     @BeforeEach
     void setUp() {
-        graphService = new GraphService(neo4jTemplate, linkParserService);
+        graphService = new GraphServiceImpl(
+                graphRepository, noteEntryMapper, noteLinkService, chatModel, neo4jTransactionTemplate);
     }
 
     @Test
-    void syncNoteToGraph_ShouldCreateRelationships_WhenLinksExist() {
-        // Arrange
-        NoteEntry note = new NoteEntry();
-        note.setId(1L);
-        note.setTitle("Source Note");
-        note.setContentMd("Links to [[Target Note]]");
-        note.setSummary("Summary");
+    void syncNote_ShouldReplaceOutgoingLinksWithOwnedTargets() {
+        NoteEntry source = note(1L, 7L, "Source Note");
+        NoteEntry target = note(2L, 7L, "Target Note");
+        when(graphRepository.findById(1L)).thenReturn(Optional.empty());
+        when(graphRepository.findById(2L)).thenReturn(Optional.empty());
+        when(noteEntryMapper.selectById(2L)).thenReturn(target);
 
-        when(linkParserService.extractWikiLinks(anyString())).thenReturn(Set.of("Target Note"));
+        graphService.syncNote(source, List.of(2L));
 
-        NoteNode targetNode = new NoteNode();
-        targetNode.setNoteId(2L);
-        targetNode.setTitle("Target Note");
-
-        // Mock finding the target note by title
-        // 注意: findOne 的第二个参数是 Map filter
-        doReturn(Optional.of(targetNode)).when(neo4jTemplate).findOne(anyString(), any(Map.class), eq(NoteNode.class));
-
-        // Act
-        graphService.syncNoteToGraph(note);
-
-        // Assert
+        verify(graphRepository).deleteOutgoingLinks(1L);
         ArgumentCaptor<NoteNode> captor = ArgumentCaptor.forClass(NoteNode.class);
-        verify(neo4jTemplate).save(captor.capture());
-
-        NoteNode savedNode = captor.getValue();
-        assertEquals(1L, savedNode.getNoteId());
-        assertEquals("Source Note", savedNode.getTitle());
-        assertEquals(1, savedNode.getReferences().size());
-        assertEquals(2L, savedNode.getReferences().iterator().next().getNoteId());
+        verify(graphRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
+        NoteNode savedSource = captor.getAllValues().stream()
+                .filter(node -> Long.valueOf(1L).equals(node.getId()))
+                .reduce((first, second) -> second)
+                .orElseThrow();
+        assertEquals(1, savedSource.getLinks().size());
+        assertEquals(2L, savedSource.getLinks().iterator().next().getId());
     }
 
     @Test
-    void getGraphData_ShouldReturnNodesAndLinks() {
-        // Arrange
-        NoteNode n1 = new NoteNode();
-        n1.setNoteId(1L);
-        n1.setTitle("Note 1");
+    void getGraph_ShouldMergeNeo4jRelationsOntoMysqlOwnedNodes() {
+        NoteEntry source = note(1L, 7L, "Note 1");
+        NoteEntry target = note(2L, 7L, "Note 2");
+        when(noteEntryMapper.selectList(any())).thenReturn(List.of(source, target));
 
-        NoteNode n2 = new NoteNode();
-        n2.setNoteId(2L);
-        n2.setTitle("Note 2");
+        NoteNode graphSource = new NoteNode(1L, "stale title", 7L);
+        graphSource.addLink(new NoteNode(2L, "Note 2", 7L));
+        when(graphRepository.findGraphByUserId(7L)).thenReturn(List.of(graphSource));
 
-        n1.setReferences(java.util.Set.of(n2));
+        List<NoteNode> graph = graphService.getGraph(7L);
 
-        doReturn(java.util.List.of(n1, n2)).when(neo4jTemplate).findAll(NoteNode.class);
+        assertEquals(2, graph.size());
+        NoteNode mergedSource = graph.stream().filter(node -> node.getId().equals(1L)).findFirst().orElseThrow();
+        assertEquals("Note 1", mergedSource.getTitle());
+        assertEquals(1, mergedSource.getLinks().size());
+    }
 
-        // Act
-        java.util.Map<String, Object> graphData = graphService.getGraphData();
+    @Test
+    void analyzeRelations_ShouldPreserveExistingRelationsWhenModelProtocolIsInvalid() {
+        NoteEntry first = note(1L, 7L, "First");
+        NoteEntry second = note(2L, 7L, "Second");
+        when(noteEntryMapper.selectList(any())).thenReturn(List.of(first, second));
+        when(chatModel.generate(any(String.class))).thenReturn("我认为这两篇很相关，但不按协议返回");
 
-        // Assert
-        java.util.List<?> nodes = (java.util.List<?>) graphData.get("nodes");
-        java.util.List<?> links = (java.util.List<?>) graphData.get("links");
+        assertThrows(BusinessException.class,
+                () -> graphService.analyzeRelations(7L, ignored -> { }));
 
-        assertEquals(2, nodes.size());
-        assertEquals(1, links.size());
+        verify(graphRepository, org.mockito.Mockito.never()).deleteRelatedByUserId(any());
+        verify(neo4jTransactionTemplate, org.mockito.Mockito.never()).execute(any());
+    }
+
+    private static NoteEntry note(Long id, Long userId, String title) {
+        NoteEntry note = new NoteEntry();
+        note.setId(id);
+        note.setUserId(userId);
+        note.setTitle(title);
+        return note;
     }
 }

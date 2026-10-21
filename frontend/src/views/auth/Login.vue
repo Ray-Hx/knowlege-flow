@@ -87,17 +87,17 @@
       </n-form>
       
       <div class="mt-8 text-center relative z-10">
-        <n-divider class="text-gray-400 text-xs">或者</n-divider>
-        <div class="flex justify-center gap-4 mt-4">
-          <!-- Mock Social Login Buttons -->
-          <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center cursor-pointer hover:scale-110 transition shadow-sm text-gray-600 hover:text-black">
-            <n-icon size="20" :component="LogoGithub" />
-          </div>
-          <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center cursor-pointer hover:scale-110 transition shadow-sm text-gray-600 hover:text-blue-500">
-            <n-icon size="20" :component="LogoGoogle" />
-          </div>
-        </div>
-        
+<!--        <n-divider class="text-gray-400 text-xs">或者</n-divider>-->
+<!--        <div class="flex justify-center gap-4 mt-4">-->
+<!--          &lt;!&ndash; Mock Social Login Buttons &ndash;&gt;-->
+<!--          <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center cursor-pointer hover:scale-110 transition shadow-sm text-gray-600 hover:text-black">-->
+<!--            <n-icon size="20" :component="LogoGithub" />-->
+<!--          </div>-->
+<!--          <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center cursor-pointer hover:scale-110 transition shadow-sm text-gray-600 hover:text-blue-500">-->
+<!--            <n-icon size="20" :component="LogoGoogle" />-->
+<!--          </div>-->
+<!--        </div>-->
+<!--        -->
         <div class="mt-8 text-gray-600 text-sm">
           还没有账号？
           <router-link to="/register" class="text-indigo-600 hover:text-indigo-800 font-bold transition">立即注册</router-link>

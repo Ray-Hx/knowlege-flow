@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /**
@@ -19,6 +20,7 @@ public class CreateNoteDto {
      * 笔记标题
      */
     @NotBlank(message = "笔记标题不能为空")
+    @Size(max = 255, message = "标题长度不能超过255个字符")
     private String title;
 
     /**
@@ -29,6 +31,7 @@ public class CreateNoteDto {
     /**
      * 文件夹ID
      */
+    @Min(value = 0, message = "文件夹ID不能为负数")
     private Long folderId;
 
     /**

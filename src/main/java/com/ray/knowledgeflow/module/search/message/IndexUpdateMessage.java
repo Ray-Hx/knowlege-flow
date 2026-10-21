@@ -48,4 +48,14 @@ public class IndexUpdateMessage implements Serializable {
      * 文档内容
      */
     private String content;
+
+    /**
+     * AI生成的摘要
+     */
+    private String summary;
+
+    /**
+     * 标签
+     */
+    private String tags;
 }

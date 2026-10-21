@@ -2,6 +2,7 @@ package com.ray.knowledgeflow.module.ai.message;
 
 import com.ray.knowledgeflow.config.RabbitMQConfig;
 import com.ray.knowledgeflow.module.ai.service.IAiService;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -20,6 +21,7 @@ public class AiProcessConsumer {
 
     private final IAiService aiService;
     private final com.ray.knowledgeflow.module.note.service.INoteService noteService;
+    private final com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper noteEntryMapper;
 
     /**
      * 监听 AI 处理队列
@@ -27,7 +29,7 @@ public class AiProcessConsumer {
      *
      * @param message AI 处理消息
      */
-    @io.github.resilience4j.ratelimiter.annotation.RateLimiter(name = "ai-service")
+    @RateLimiter(name = "ai-service")
     @RabbitListener(queues = RabbitMQConfig.AI_PROCESS_QUEUE)
     public void handleAiProcessTask(AiProcessMessage message) {
         log.info("收到AI处理任务: taskType={}, noteId={}",
@@ -53,7 +55,7 @@ public class AiProcessConsumer {
         } catch (Exception e) {
             log.error("AI处理任务失败: taskType={}, noteId={}",
                     message.getTaskType(), message.getNoteId(), e);
-            // TODO: 可以考虑重试机制或发送到死信队列
+            throw new IllegalStateException("AI处理任务失败", e);
         }
     }
 
@@ -85,14 +87,23 @@ public class AiProcessConsumer {
     private void extractTags(AiProcessMessage message) {
         log.info("开始提取标签: noteId={}", message.getNoteId());
 
-        java.util.List<String> tags = aiService.extractTags(message.getContent());
+        java.util.List<String> tags = aiService.extractTags(message.getTitle(), message.getContent());
+        log.info("AI 提取标签结果: noteId={}, tags={}", message.getNoteId(), tags);
 
         if (tags != null && !tags.isEmpty()) {
             String tagsStr = String.join(",", tags);
-            com.ray.knowledgeflow.module.note.dto.UpdateNoteDto updateDto = new com.ray.knowledgeflow.module.note.dto.UpdateNoteDto();
-            updateDto.setTags(tagsStr);
-            noteService.updateNote(message.getUserId(), message.getNoteId(), updateDto);
-            log.info("标签提取并保存完成: noteId={}, tags={}", message.getNoteId(), tagsStr);
+            com.ray.knowledgeflow.module.note.entity.NoteEntry updateEntity = new com.ray.knowledgeflow.module.note.entity.NoteEntry();
+            updateEntity.setId(message.getNoteId());
+            updateEntity.setTags(tagsStr);
+            try {
+                // 直接使用 mapper 更新，避免触发 NoteService 的 side effects (如历史版本、AI处理循环等)
+                noteEntryMapper.updateById(updateEntity);
+                log.info("标签提取并保存完成 (Direct Update): noteId={}, tags={}", message.getNoteId(), tagsStr);
+            } catch (Exception e) {
+                log.error("直接保存 AI 标签失败: noteId={}", message.getNoteId(), e);
+            }
+        } else {
+            log.warn("AI 未能为笔记提取到任何标签: noteId={}", message.getNoteId());
         }
     }
 

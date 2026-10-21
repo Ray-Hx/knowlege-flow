@@ -36,6 +36,16 @@ public interface NoteEngagementService {
     Long getLikeCount(Long noteId);
 
     /**
+     * 以数据库为准刷新点赞缓存，并失效指定用户的点赞状态缓存。
+     *
+     * <p>由 MQ 消费者在事务提交后调用。因为是全量重算而非增量修改，
+     * 重复消费与乱序投递都会收敛到正确值。
+     *
+     * @param userId 触发变更的用户，可为 null（仅刷新计数）
+     */
+    void refreshLikeCountFromDb(Long noteId, Long userId);
+
+    /**
      * 判断用户是否已点赞
      */
     boolean isLiked(Long userId, Long noteId);

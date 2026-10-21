@@ -84,6 +84,11 @@ public class NoteEntry implements Serializable {
     private Integer isPublic;
 
     /**
+     * 累计浏览量。Redis 承担高频自增，由定时任务回写此列。
+     */
+    private Long viewCount;
+
+    /**
      * 逻辑删除
      */
     @TableLogic

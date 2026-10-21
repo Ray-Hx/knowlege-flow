@@ -29,7 +29,7 @@
               <n-avatar
                 round
                 size="medium"
-                :src="note.authorAvatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'"
+                :src="note.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'"
                 class="border border-white shadow-sm"
               />
               <div class="flex flex-col">
@@ -67,7 +67,7 @@
       </div>
 
       <!-- 内容区域 -->
-      <div class="p-8 min-h-[500px]">
+      <div class="p-8 min-h-[500px]" @click="handleEditorClick">
         <div id="preview" class="markdown-body"></div>
       </div>
 
@@ -77,7 +77,7 @@
           <n-icon size="20" class="text-orange-400">
              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.02c-5.524 0-10 4.476-10 10s4.476 10 10 10s10-4.476 10-10C22 6.55 17.58 2.02 12 2.02zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8s8 3.58 8 8s-3.58 8-8 8zm-2-9h4v4h-4v-4zm0-5h4v4h-4V6z"/></svg>
           </n-icon>
-          AI 相关推荐
+          相关推荐
         </h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div 
@@ -92,7 +92,7 @@
             </div>
             <div class="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between text-xs text-gray-400">
                <span class="flex items-center gap-1 hover:text-indigo-600 transition-colors" @click.stop="goToProfile(relNote.authorId)">
-                 <n-avatar round size="small" :src="relNote.authorAvatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'" class="w-4 h-4" />
+                 <n-avatar round size="small" :src="relNote.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'" class="w-4 h-4" />
                  {{ relNote.authorName || '匿名用户' }}
                </span>
                <span class="flex items-center gap-3">
@@ -155,7 +155,7 @@
               <n-avatar
                 round
                 size="small"
-                :src="comment.authorAvatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'"
+                :src="comment.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'"
               />
               <div class="flex-1">
                 <!-- 评论主体 -->
@@ -184,7 +184,7 @@
                     <n-avatar
                       round
                       size="small"
-                      :src="reply.authorAvatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'"
+                      :src="reply.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'"
                     />
                     <div class="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
                       <div class="flex items-center justify-between mb-1">
@@ -212,6 +212,8 @@
         </n-spin>
       </div>
     </div>
+    
+    <ArticleViewerModal ref="articleModalRef" />
   </div>
 </template>
 
@@ -224,6 +226,7 @@ import type { NoteComment } from '@/api/community'
 import type { NoteDetail } from '@/api/note'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
+import ArticleViewerModal from '@/components/common/ArticleViewerModal.vue'
 import dayjs from 'dayjs'
 import { useUserStore } from '@/store/user'
 
@@ -239,6 +242,7 @@ const isLiked = ref(false)
 const likeCount = ref(0)
 const likeLoading = ref(false)
 const relatedNotes = ref<any[]>([])
+const articleModalRef = ref<any>(null)
 
 // 评论相关
 const comments = ref<NoteComment[]>([])
@@ -246,6 +250,17 @@ const commentsLoading = ref(false)
 const newComment = ref('')
 const submitLoading = ref(false)
 const replyTo = ref<NoteComment | null>(null)
+
+const handleEditorClick = (e: MouseEvent) => {
+  const target = (e.target as HTMLElement).closest('.article-ref-badge')
+  if (target) {
+      e.preventDefault()
+      const articleId = target.getAttribute('data-article-id')
+      if (articleId) {
+          articleModalRef.value?.open(Number(articleId))
+      }
+  }
+}
 
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY年MM月DD日')
@@ -373,7 +388,11 @@ const loadNote = async () => {
                  transform(html: string) {
                     html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_, id, title) => {
                         const displayTitle = title ? title : `文章引用 #${id}`
-                        return `<span class="article-ref-badge" style="cursor:pointer" onclick="window.open('/content', '_blank')">📰 ${displayTitle}</span>`
+                        return `<a class="article-ref-badge" href="javascript:void(0);" data-article-id="${id}" style="text-decoration: none;">📰 ${displayTitle}</a>`
+                    })
+                    html = html.replace(/\[\[note:(\d+)(?:\|([^\]]+))?\]\]/gi, (_, id, title) => {
+                        const displayTitle = title || `笔记 #${id}`
+                        return `<a class="note-ref-badge" href="/community/note/${id}" target="_blank" style="text-decoration: none;">📝 ${displayTitle}</a>`
                     })
                     html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
                         // 在游客模式下，由于不知道 ID，只能弹窗或者去搜索页

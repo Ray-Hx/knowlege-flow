@@ -10,6 +10,7 @@ import com.ray.knowledgeflow.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -61,24 +62,20 @@ public class AiController {
 
     @PostMapping("/chat/send")
     @Operation(summary = "发送消息")
-    public Result<MessageDto> sendMessage(@RequestBody SendMessageDto dto) {
+    public Result<MessageDto> sendMessage(@Valid @RequestBody SendMessageDto dto) {
         Long userId = SecurityUtils.getCurrentUserId();
-        // Assuming conversationId is passed in dto for simplicity in this endpoint,
-        // or we could use path param. defined in plan as /ai/chat/send
-        // The service method signature is: MessageDto sendMessage(Long userId, Long
-        // conversationId, SendMessageDto dto);
-        // But SendMessageDto usually also contains conversationId? Let's check
-        // SendMessageDto.
-        // Actually, looking at previous view of AiServiceImpl:
-        // public MessageDto sendMessage(Long userId, Long conversationId,
-        // SendMessageDto dto)
-        // Frontend passes conversationId in body: { conversationId, message, enableRags
-        // }
-        // Let's assume SendMessageDto has conversationId based on frontend api.ts:
-        // sendMessage(conversationId: number, message: string) { return request.post...
-        // { conversationId, message... } }
 
         return Result.success(aiService.sendMessage(userId, dto.getConversationId(), dto));
+    }
+
+    @PostMapping(value = "/chat/send/stream", produces = org.springframework.http.MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Operation(summary = "流式发送消息")
+    public org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamSendMessage(
+            @Valid @RequestBody SendMessageDto dto, jakarta.servlet.http.HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-cache");
+        response.setHeader("X-Accel-Buffering", "no"); // 禁用 Nginx 缓冲
+        Long userId = SecurityUtils.getCurrentUserId();
+        return aiService.streamChat(userId, dto.getConversationId(), dto);
     }
 
     @PostMapping("/analyze")
@@ -92,7 +89,8 @@ public class AiController {
         if (content == null || content.trim().isEmpty()) {
             return Result.fail("内容不能为空");
         }
-        return Result.success(aiService.generateDeepAnalysis(content, targetType, targetId));
+        Long userId = SecurityUtils.getCurrentUserId();
+        return Result.success(aiService.generateDeepAnalysis(userId, content, targetType, targetId));
     }
 
     @PostMapping(value = "/analyze/stream")
@@ -103,7 +101,8 @@ public class AiController {
         String targetType = (String) request.get("targetType");
         Long targetId = request.get("targetId") != null ? Long.valueOf(request.get("targetId").toString()) : null;
 
-        return aiService.streamDeepAnalysis(content, targetType, targetId);
+        Long userId = SecurityUtils.getCurrentUserId();
+        return aiService.streamDeepAnalysis(userId, content, targetType, targetId);
     }
 
     @PostMapping("/text/polish")

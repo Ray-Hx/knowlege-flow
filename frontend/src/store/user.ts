@@ -3,7 +3,8 @@ import { defineStore } from 'pinia'
 export const useUserStore = defineStore('user', {
     state: () => ({
         token: localStorage.getItem('token') || '',
-        userInfo: JSON.parse(localStorage.getItem('userInfo') || '{}')
+        userInfo: JSON.parse(localStorage.getItem('userInfo') || '{}'),
+        unreadMessageCount: 0
     }),
     getters: {
         isLoggedIn: (state) => !!state.token
@@ -20,8 +21,19 @@ export const useUserStore = defineStore('user', {
         logout() {
             this.token = ''
             this.userInfo = {}
+            this.unreadMessageCount = 0
             localStorage.removeItem('token')
             localStorage.removeItem('userInfo')
+        },
+        async fetchUnreadMessageCount() {
+            if (!this.token) return
+            try {
+                const { getUnreadTotal } = await import('@/api/message')
+                const res = await getUnreadTotal()
+                this.unreadMessageCount = res || 0
+            } catch (e) {
+                // Ignore error silently
+            }
         }
     }
 })

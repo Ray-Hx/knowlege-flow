@@ -1,6 +1,7 @@
 package com.ray.knowledgeflow.module.content.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -11,13 +12,19 @@ import com.ray.knowledgeflow.module.content.entity.ContentSource;
 import com.ray.knowledgeflow.module.content.mapper.ContentItemMapper;
 import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
 import com.ray.knowledgeflow.module.content.service.IContentItemService;
+import com.ray.knowledgeflow.module.search.event.ContentDeletedEvent;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 内容项服务实现类
@@ -31,23 +38,49 @@ public class ContentItemServiceImpl extends ServiceImpl<ContentItemMapper, Conte
         implements IContentItemService {
 
     private final ContentSourceMapper contentSourceMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
-    public IPage<ContentItemDto> pageByUserId(Long userId, Integer status, Long sourceId,
+    public IPage<ContentItemDto> pageByUserId(Long userId, Integer status, Long sourceId, Boolean isUpload,
             String keyword, int page, int size) {
-        LambdaQueryWrapper<ContentItem> wrapper = new LambdaQueryWrapper<ContentItem>()
-                .eq(ContentItem::getUserId, userId)
-                .eq(status != null, ContentItem::getStatus, status)
-                .eq(sourceId != null, ContentItem::getSourceId, sourceId)
-                .and(StringUtils.hasText(keyword), w -> w
-                        .like(ContentItem::getTitle, keyword)
-                        .or()
-                        .like(ContentItem::getSummary, keyword))
+        LambdaQueryWrapper<ContentItem> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ContentItem::getUserId, userId);
+        queryWrapper.eq(ContentItem::getDeleted, 0);
+
+        if (status != null) {
+            queryWrapper.eq(ContentItem::getStatus, status);
+        }
+        if (sourceId != null) {
+            queryWrapper.eq(ContentItem::getSourceId, sourceId);
+        }
+        if (isUpload != null) {
+            if (isUpload) {
+                queryWrapper.isNull(ContentItem::getSourceId);
+            } else {
+                queryWrapper.isNotNull(ContentItem::getSourceId);
+            }
+        }
+        queryWrapper.and(StringUtils.hasText(keyword), w -> w
+                .like(ContentItem::getTitle, keyword)
+                .or()
+                .like(ContentItem::getSummary, keyword))
                 .orderByDesc(ContentItem::getPublishTime);
 
-        Page<ContentItem> pageResult = this.page(new Page<>(page, size), wrapper);
+        Page<ContentItem> pageResult = this.page(new Page<>(page, size), queryWrapper);
 
-        return pageResult.convert(this::toDto);
+        Set<Long> sourceIds = pageResult.getRecords().stream()
+                .map(ContentItem::getSourceId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, ContentSource> sourceMap = sourceIds.isEmpty()
+                ? Collections.emptyMap()
+                : contentSourceMapper.selectList(new LambdaQueryWrapper<ContentSource>()
+                                .in(ContentSource::getId, sourceIds)
+                                .eq(ContentSource::getUserId, userId))
+                        .stream()
+                        .collect(Collectors.toMap(ContentSource::getId, Function.identity()));
+
+        return pageResult.convert(item -> toDto(item, sourceMap));
     }
 
     @Override
@@ -75,13 +108,21 @@ public class ContentItemServiceImpl extends ServiceImpl<ContentItemMapper, Conte
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void batchUpdateStatus(Long userId, Long[] itemIds, Integer status) {
-        for (Long itemId : itemIds) {
-            ContentItem item = this.getById(itemId);
-            if (item != null && item.getUserId().equals(userId)) {
-                item.setStatus(status);
-                this.updateById(item);
-            }
+        if (itemIds == null || itemIds.length == 0) {
+            return;
         }
+        java.util.List<Long> distinctIds = java.util.Arrays.stream(itemIds)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        if (distinctIds.isEmpty()) {
+            return;
+        }
+        ContentItem update = new ContentItem();
+        update.setStatus(status);
+        this.update(update, new LambdaUpdateWrapper<ContentItem>()
+                .eq(ContentItem::getUserId, userId)
+                .in(ContentItem::getId, distinctIds));
     }
 
     @Override
@@ -89,6 +130,26 @@ public class ContentItemServiceImpl extends ServiceImpl<ContentItemMapper, Conte
     public void deleteItem(Long userId, Long itemId) {
         ContentItem item = getAndCheckOwnership(userId, itemId);
         this.removeById(item.getId());
+        // 发布内容同步更新事件
+        eventPublisher.publishEvent(new ContentDeletedEvent(this, itemId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int deleteBySource(Long userId, Long sourceId) {
+        java.util.List<ContentItem> items = this.list(new LambdaQueryWrapper<ContentItem>()
+                .select(ContentItem::getId)
+                .eq(ContentItem::getUserId, userId)
+                .eq(ContentItem::getSourceId, sourceId));
+        if (items.isEmpty()) {
+            return 0;
+        }
+        java.util.List<Long> ids = items.stream().map(ContentItem::getId).toList();
+        this.remove(new LambdaQueryWrapper<ContentItem>()
+                .eq(ContentItem::getUserId, userId)
+                .eq(ContentItem::getSourceId, sourceId));
+        ids.forEach(id -> eventPublisher.publishEvent(new ContentDeletedEvent(this, id)));
+        return ids.size();
     }
 
     // ========== 私有方法 ==========
@@ -105,15 +166,17 @@ public class ContentItemServiceImpl extends ServiceImpl<ContentItemMapper, Conte
     }
 
     private ContentItemDto toDto(ContentItem item) {
+        ContentSource source = item.getSourceId() == null ? null : contentSourceMapper.selectById(item.getSourceId());
+        return toDto(item, source == null ? Collections.emptyMap() : Map.of(source.getId(), source));
+    }
+
+    private ContentItemDto toDto(ContentItem item, Map<Long, ContentSource> sourceMap) {
         ContentItemDto dto = new ContentItemDto();
         BeanUtils.copyProperties(item, dto);
 
-        // 获取来源名称
-        if (item.getSourceId() != null) {
-            ContentSource source = contentSourceMapper.selectById(item.getSourceId());
-            if (source != null) {
-                dto.setSourceName(source.getName());
-            }
+        ContentSource source = sourceMap.get(item.getSourceId());
+        if (source != null) {
+            dto.setSourceName(source.getName());
         }
 
         return dto;

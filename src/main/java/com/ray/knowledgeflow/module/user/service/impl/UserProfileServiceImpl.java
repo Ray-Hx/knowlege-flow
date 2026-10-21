@@ -5,23 +5,20 @@ import com.ray.knowledgeflow.common.exception.BusinessException;
 import com.ray.knowledgeflow.module.user.dto.ChangePasswordDto;
 import com.ray.knowledgeflow.module.user.dto.UpdateProfileDto;
 import com.ray.knowledgeflow.module.user.dto.UserProfileDto;
+import com.ray.knowledgeflow.module.user.dto.UserSettingsDto;
 import com.ray.knowledgeflow.module.user.entity.SysUser;
 import com.ray.knowledgeflow.module.user.entity.SysUserProfile;
 import com.ray.knowledgeflow.module.user.mapper.UserProfileMapper;
 import com.ray.knowledgeflow.module.user.service.IUserProfileService;
 import com.ray.knowledgeflow.module.user.service.IUserService;
-import io.minio.MinioClient;
-import io.minio.PutObjectArgs;
+import com.ray.knowledgeflow.common.utils.MinioUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.InputStream;
-import java.util.UUID;
 
 /**
  * <p>
@@ -39,13 +36,7 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
 
     private final IUserService userService;
     private final PasswordEncoder passwordEncoder;
-    private final MinioClient minioClient;
-
-    @Value("${minio.bucket-name:knowledge-flow}")
-    private String bucketName;
-
-    @Value("${minio.endpoint:http://localhost:9000}")
-    private String minioEndpoint;
+    private final MinioUtil minioUtil;
 
     @Override
     public UserProfileDto getProfile(Long userId) {
@@ -57,6 +48,7 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
         SysUserProfile profile = this.getById(userId);
 
         UserProfileDto dto = new UserProfileDto();
+        dto.setId(user.getId());
         dto.setUsername(user.getUsername());
         dto.setEmail(user.getEmail());
         dto.setAvatar(user.getAvatar());
@@ -64,6 +56,7 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
         if (profile != null) {
             dto.setBio(profile.getBio());
             dto.setGithubId(profile.getGithubId());
+            dto.setLearningGoals(profile.getLearningGoals());
         }
 
         return dto;
@@ -96,6 +89,9 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
         if (dto.getGithubId() != null) {
             profile.setGithubId(dto.getGithubId());
         }
+        if (dto.getLearningGoals() != null) {
+            profile.setLearningGoals(dto.getLearningGoals());
+        }
 
         this.saveOrUpdate(profile);
 
@@ -109,35 +105,7 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
             throw new BusinessException(400, "请选择要上传的头像文件");
         }
 
-        // 验证文件类型
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new BusinessException(400, "仅支持上传图片文件");
-        }
-
-        // 生成文件名
-        String originalFilename = file.getOriginalFilename();
-        String extension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        }
-        String objectName = "avatars/" + userId + "/" + UUID.randomUUID() + extension;
-
-        try (InputStream inputStream = file.getInputStream()) {
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(objectName)
-                            .stream(inputStream, file.getSize(), -1)
-                            .contentType(contentType)
-                            .build());
-        } catch (Exception e) {
-            log.error("头像上传失败", e);
-            throw new BusinessException(500, "头像上传失败，请稍后重试");
-        }
-
-        // 构建访问 URL
-        String avatarUrl = minioEndpoint + "/" + bucketName + "/" + objectName;
+        String avatarUrl = minioUtil.uploadImage(file, "avatars/" + userId, 5 * 1024 * 1024L);
 
         // 更新用户头像
         SysUser user = userService.getById(userId);
@@ -162,5 +130,30 @@ public class UserProfileServiceImpl extends ServiceImpl<UserProfileMapper, SysUs
         // 更新密码
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         userService.updateById(user);
+    }
+
+    @Override
+    public boolean isPublicProfile(Long userId) {
+        SysUserProfile profile = this.getById(userId);
+        if (profile == null) {
+            return false;
+        }
+        UserSettingsDto.PrivacySettings privacy = getPrivacySettings(profile);
+        return (privacy != null && Boolean.TRUE.equals(privacy.getPublicProfile()))
+                || Integer.valueOf(1).equals(profile.getIsPublic());
+    }
+
+    @Override
+    public boolean isPublicStats(Long userId) {
+        SysUserProfile profile = this.getById(userId);
+        UserSettingsDto.PrivacySettings privacy = getPrivacySettings(profile);
+        return privacy != null && Boolean.TRUE.equals(privacy.getPublicStats());
+    }
+
+    private UserSettingsDto.PrivacySettings getPrivacySettings(SysUserProfile profile) {
+        if (profile == null || profile.getPreferences() == null) {
+            return null;
+        }
+        return profile.getPreferences().getPrivacySettings();
     }
 }

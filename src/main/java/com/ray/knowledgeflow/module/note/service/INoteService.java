@@ -50,6 +50,25 @@ public interface INoteService {
     NoteDetailDto getNoteDetail(Long userId, Long noteId);
 
     /**
+     * 获取笔记的历史版本列表
+     *
+     * @param userId 用户ID
+     * @param noteId 笔记ID
+     * @return 历史版本列表
+     */
+    java.util.List<NoteVersionDto> getNoteVersions(Long userId, Long noteId);
+
+    /**
+     * 获取指定笔记历史版本详情
+     *
+     * @param userId    用户ID
+     * @param noteId    笔记ID
+     * @param versionId 版本ID
+     * @return 版本详情
+     */
+    NoteVersionDto getNoteVersionDetail(Long userId, Long noteId, Long versionId);
+
+    /**
      * 分页查询笔记列表
      *
      * @param userId   用户ID

@@ -29,6 +29,7 @@ public class UpdateNoteDto {
     /**
      * 文件夹ID
      */
+    @Min(value = 0, message = "文件夹ID不能为负数")
     private Long folderId;
 
     /**

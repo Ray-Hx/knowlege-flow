@@ -4,15 +4,18 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ray.knowledgeflow.common.utils.HttpClientUtil;
+import com.ray.knowledgeflow.common.utils.OutboundUrlValidator;
 import com.ray.knowledgeflow.module.content.entity.ContentItem;
 import com.ray.knowledgeflow.module.content.entity.ContentSource;
 import com.ray.knowledgeflow.module.content.mapper.ContentItemMapper;
+import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
 import com.ray.knowledgeflow.module.content.service.IGitHubFetchService;
 import com.ray.knowledgeflow.module.user.entity.SysUserProfile;
 import com.ray.knowledgeflow.module.user.mapper.UserProfileMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.safety.Safelist;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -22,6 +25,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * GitHub抓取服务实现类
@@ -35,6 +39,7 @@ import java.util.Map;
 public class GitHubFetchServiceImpl implements IGitHubFetchService {
 
     private final ContentItemMapper contentItemMapper;
+    private final ContentSourceMapper contentSourceMapper;
     private final UserProfileMapper userProfileMapper;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
@@ -74,6 +79,8 @@ public class GitHubFetchServiceImpl implements IGitHubFetchService {
             if (apiUrl == null || apiUrl.isEmpty()) {
                 apiUrl = "https://api.github.com/user/starred";
             }
+            // 只有 GitHub 官方 API 才能接收用户的 Personal Access Token。
+            OutboundUrlValidator.requireHost(apiUrl, true, Set.of("api.github.com"));
 
             // 添加分页参数
             if (!apiUrl.contains("?")) {
@@ -129,7 +136,7 @@ public class GitHubFetchServiceImpl implements IGitHubFetchService {
                         String readmeContent = new String(Base64.getDecoder().decode(base64Content));
 
                         // 转换Markdown为纯文本
-                        String plainText = Jsoup.parse(readmeContent).text();
+                        String plainText = Jsoup.clean(Jsoup.parse(readmeContent).text(), Safelist.none());
                         item.setContentText(
                                 plainText.length() > 5000 ? plainText.substring(0, 5000) + "..." : plainText);
                     }
@@ -186,7 +193,12 @@ public class GitHubFetchServiceImpl implements IGitHubFetchService {
 
     @Override
     public void fetchFromSource(Long sourceId, Long userId) {
-        log.info("GitHub fetchFromSource 占位方法: sourceId={}, userId={}", sourceId, userId);
-        // TODO: 实现根据 sourceId 查询并调用 fetchAsync
+        ContentSource source = contentSourceMapper.selectOne(new LambdaQueryWrapper<ContentSource>()
+                .eq(ContentSource::getId, sourceId)
+                .eq(ContentSource::getUserId, userId));
+        if (source == null || source.getType() == null || !"GITHUB".equalsIgnoreCase(source.getType())) {
+            throw new IllegalArgumentException("内容源不存在、无权访问或类型不匹配");
+        }
+        fetch(source);
     }
 }

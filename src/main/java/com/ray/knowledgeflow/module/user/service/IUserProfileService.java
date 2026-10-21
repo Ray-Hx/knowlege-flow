@@ -50,4 +50,10 @@ public interface IUserProfileService extends IService<SysUserProfile> {
      * @param dto    修改密码参数
      */
     void changePassword(Long userId, ChangePasswordDto dto);
+
+    /** 是否允许匿名访问个人主页。 */
+    boolean isPublicProfile(Long userId);
+
+    /** 是否允许匿名访问学习统计。 */
+    boolean isPublicStats(Long userId);
 }

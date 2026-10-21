@@ -83,8 +83,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, SysUser> implements
         // 创建用户资料记录
         SysUserProfile profile = new SysUserProfile();
         profile.setUserId(user.getId());
-        profile.setPreferences(
-                "{\"interests\":[],\"preferredCategories\":[],\"uiSettings\":{\"theme\":\"light\",\"language\":\"zh-CN\"}}");
+
+        com.ray.knowledgeflow.module.user.dto.UserSettingsDto settings = new com.ray.knowledgeflow.module.user.dto.UserSettingsDto();
+        settings.setUiSettings(new com.ray.knowledgeflow.module.user.dto.UserSettingsDto.UiSettings());
+        settings.getUiSettings().setTheme("light");
+        settings.getUiSettings().setLanguage("zh-CN");
+        profile.setPreferences(settings);
+
         userProfileMapper.insert(profile);
 
         return user;
@@ -100,11 +105,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, SysUser> implements
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(loginDto.getUsername(), loginDto.getPassword()));
 
-        if (authentication.isAuthenticated()) {
-            return jwtUtils.generateToken(loginDto.getUsername());
-        } else {
+        if (!authentication.isAuthenticated()) {
             throw new BusinessException(401, "用户名或密码错误");
         }
+
+        // 认证过程已加载用户与角色，直接复用，避免重复查库
+        com.ray.knowledgeflow.security.UserPrincipal principal = (com.ray.knowledgeflow.security.UserPrincipal) authentication
+                .getPrincipal();
+        return jwtUtils.generateToken(principal.getId(), principal.getUsername(), principal.getRoleCodes());
     }
 
     @Override
@@ -183,7 +191,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, SysUser> implements
 
     @Override
     public List<SysRole> getUserRoles(Long userId) {
-        return baseMapper.selectRolesByUserId(userId);
+        // 项目只有单一角色，不使用 sys_role 表，直接返回空列表
+        return java.util.Collections.emptyList();
     }
 
     // ========== 私有方法 ==========
@@ -221,15 +230,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, SysUser> implements
         if (profile != null) {
             dto.setBio(profile.getBio());
             dto.setGithubId(profile.getGithubId());
+            // 这里由于 UserInfoDto.preferences 还是 String，需要序列化或者更新 UserInfoDto
+            // 为了保持一致，我也将更新 UserInfoDto
             dto.setPreferences(profile.getPreferences());
             dto.setLearningGoals(profile.getLearningGoals());
         }
 
-        // Set roles
-        List<SysRole> roles = getUserRoles(user.getId());
-        if (roles != null) {
-            dto.setRoles(roles.stream().map(SysRole::getRoleName).collect(java.util.stream.Collectors.toList()));
-        }
+        // 项目只有单一角色，不使用 sys_role 表，跳过角色查询
 
         return dto;
     }

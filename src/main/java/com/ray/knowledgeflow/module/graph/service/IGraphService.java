@@ -29,20 +29,17 @@ public interface IGraphService {
     void deleteNote(Long noteId);
 
     /**
+     * 从 MySQL 笔记与 note_link 事实表重建用户的显式图投影。
+     */
+    int rebuildGraph(Long userId);
+
+    /**
      * 获取用户的全量知识图谱
      *
      * @param userId 用户ID
      * @return 节点列表（包含关系）
      */
     List<NoteNode> getGraph(Long userId);
-
-    /**
-     * 获取全网公开笔记的知识图谱 (限制节点数)
-     *
-     * @param limit 最大返回的公开笔记数量
-     * @return 节点列表（只包含关联这些节点的网络边界）
-     */
-    List<NoteNode> getGlobalGraph(int limit);
 
     /**
      * 使用 AI (向量相似度) 分析并建立笔记关联
@@ -53,11 +50,15 @@ public interface IGraphService {
     int analyzeRelations(Long userId);
 
     /**
-     * 使用 AI 分析关联（流式进度回调）
-     *
-     * @param userId           用户ID
-     * @param progressCallback 进度回调消息
-     * @return 建立的新关联数量
+     * 流式进行 AI 分析，将进度发送到 Consumer
      */
-    int analyzeRelations(Long userId, java.util.function.Consumer<String> progressCallback);
+    int analyzeRelations(Long userId, java.util.function.Consumer<String> progressConsumer);
+
+    /**
+     * 获取社区层面的全景知识星光图谱
+     *
+     * @param limit 获取图谱网络中前N个最热门的公开笔记的节点信息
+     * @return 图谱节点及关系
+     */
+    List<NoteNode> getCommunityGraph(int limit);
 }

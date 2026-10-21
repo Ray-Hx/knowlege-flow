@@ -1,6 +1,8 @@
 package com.ray.knowledgeflow.module.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.Data;
+import java.util.List;
 
 /**
  * 用户设置 DTO
@@ -9,7 +11,18 @@ import lombok.Data;
  * @since 2024-01-16
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UserSettingsDto {
+
+    /**
+     * 兴趣爱好
+     */
+    private List<String> interests;
+
+    /**
+     * 偏好的笔记分类
+     */
+    private List<String> preferredCategories;
 
     /**
      * UI 设置

@@ -27,10 +27,10 @@ export interface ReviewNote {
  * 复习统计
  */
 export interface SpacedStats {
-    totalNotes: number
+    totalCards: number
     dueToday: number
     reviewedToday: number
-    masteredNotes: number
+    masteredCards: number
 }
 
 // ================ API ================

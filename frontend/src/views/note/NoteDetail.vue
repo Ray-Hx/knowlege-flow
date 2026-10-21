@@ -2,9 +2,9 @@
 import { ref, onMounted, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NInput, NButton, NSpace, NSelect, useMessage, NSpin, NCard, NCollapseTransition, NIcon, NModal, NEmpty } from 'naive-ui'
-import { ArrowBackOutline, SaveOutline, LinkOutline } from '@vicons/ionicons5'
+import { ArrowBackOutline, SaveOutline, LinkOutline, TimeOutline } from '@vicons/ionicons5'
 import MarkdownEditor from '@/components/editor/MarkdownEditor.vue'
-import { noteApi, NoteFolder, NoteLink, ContentLink } from '@/api/note'
+import { noteApi, NoteFolder, NoteLink, ContentLink, NoteVersion } from '@/api/note'
 import { contentApi, ContentItem } from '@/api/content'
 import { noteReadingTracker } from '@/utils/noteReadingTracker'
 
@@ -40,6 +40,16 @@ const model = ref<{
   contentMd: '',
   tags: []
 })
+
+// 历史版本弹窗控制
+const showHistoryModal = ref(false)
+const historyList = ref<NoteVersion[]>([])
+const loadingHistory = ref(false)
+
+// 历史版本详情弹窗控制
+const showVersionDetailModal = ref(false)
+const currentHistoryVersion = ref<NoteVersion | null>(null)
+const loadingVersionDetail = ref(false)
 
 // 搜索文章
 const searchArticles = async () => {
@@ -160,6 +170,54 @@ const openContentLink = (url: string) => {
   window.open(url, '_blank')
 }
 
+// 历史记录相关
+const openHistory = async () => {
+  if (!noteId.value) {
+    message.warning('当前笔记未保存，无历史记录')
+    return
+  }
+  showHistoryModal.value = true
+  loadingHistory.value = true
+  try {
+    historyList.value = await noteApi.getNoteVersions(noteId.value)
+  } catch (e: any) {
+    message.error(e.message || '加载历史记录失败')
+  } finally {
+    loadingHistory.value = false
+  }
+}
+
+const viewVersion = async (version: NoteVersion) => {
+  if (!noteId.value) return
+  loadingVersionDetail.value = true
+  showVersionDetailModal.value = true
+  try {
+    const detail = await noteApi.getNoteVersionDetail(noteId.value, version.id)
+    currentHistoryVersion.value = detail
+  } catch (e: any) {
+    message.error(e.message || '加载版本详情失败')
+    showVersionDetailModal.value = false
+  } finally {
+    loadingVersionDetail.value = false
+  }
+}
+
+const restoreVersion = () => {
+  if (!currentHistoryVersion.value) return
+  model.value.title = currentHistoryVersion.value.title
+  if (currentHistoryVersion.value.contentMd) {
+    model.value.contentMd = currentHistoryVersion.value.contentMd
+  }
+  showVersionDetailModal.value = false
+  showHistoryModal.value = false
+  message.success('已恢复内容到编辑器，点击保存即可生效')
+}
+
+const formatDateTime = (dateStr: string) => {
+  const date = new Date(dateStr)
+  return date.toLocaleString()
+}
+
 onMounted(() => {
   fetchFolders()
   const idParam = route.params.id
@@ -216,6 +274,10 @@ watch(() => route.params.id, (newId) => {
           />
           <n-button quaternary @click="showLinksPanel = !showLinksPanel">
             <template #icon><n-icon><LinkOutline /></n-icon></template>
+          </n-button>
+          <n-button quaternary @click="openHistory" :disabled="!noteId">
+            <template #icon><n-icon><TimeOutline /></n-icon></template>
+            历史记录
           </n-button>
           <n-button type="primary" :loading="saving" @click="handleSave">
             <template #icon><n-icon><SaveOutline /></n-icon></template>
@@ -288,7 +350,7 @@ watch(() => route.params.id, (newId) => {
               📰 插入订阅文章
             </n-button>
             <div class="text-xs text-gray-500 mt-2">
-              <p>💡 输入 <code class="bg-gray-100 px-1 rounded">[[笔记标题]]</code> 引用其他笔记</p>
+              <p>💡 在编辑器输入 <code class="bg-gray-100 px-1 rounded">[[</code> 并选择笔记，将插入稳定 ID 引用</p>
             </div>
           </div>
         </n-card>
@@ -327,6 +389,47 @@ watch(() => route.params.id, (newId) => {
         </n-spin>
       </div>
     </n-modal>
+    <!-- 历史记录列表弹窗 -->
+    <n-modal v-model:show="showHistoryModal" preset="card" style="width: 500px;" title="版本历史">
+      <n-spin :show="loadingHistory">
+        <div v-if="historyList.length === 0" class="py-10 text-center text-gray-500">
+          暂无历史记录
+        </div>
+        <div v-else class="flex flex-col gap-2 max-h-96 overflow-y-auto pr-2">
+          <div 
+            v-for="version in historyList" 
+            :key="version.id"
+            class="p-3 border rounded hover:border-blue-400 hover:shadow-sm cursor-pointer bg-gray-50 flex justify-between items-center transition-all"
+            @click="viewVersion(version)"
+          >
+            <div>
+              <div class="font-medium text-gray-800">{{ version.title }}</div>
+              <div class="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <n-icon><TimeOutline /></n-icon>
+                {{ formatDateTime(version.createdTime) }}
+              </div>
+            </div>
+            <n-button size="small" type="primary" secondary>查看</n-button>
+          </div>
+        </div>
+      </n-spin>
+    </n-modal>
+
+    <!-- 版本详情预览弹窗 -->
+    <n-modal v-model:show="showVersionDetailModal" preset="card" style="width: 800px; max-width: 90vw;" title="版本内容预览">
+      <n-spin :show="loadingVersionDetail">
+        <div v-if="currentHistoryVersion" class="flex flex-col gap-4">
+          <div class="bg-blue-50 text-blue-800 p-3 rounded text-sm flex justify-between items-center">
+            <span>正在查看 <b>{{ formatDateTime(currentHistoryVersion.createdTime) }}</b> 的版本快照。</span>
+            <n-button type="primary" size="small" @click="restoreVersion">恢复此版本</n-button>
+          </div>
+          <div class="text-xl font-bold border-b pb-2">{{ currentHistoryVersion.title }}</div>
+          <div class="bg-gray-50 border rounded p-4 max-h-[60vh] overflow-y-auto markdown-body" v-html="currentHistoryVersion.contentMd ? currentHistoryVersion.contentMd : '该版本无内容'">
+          </div>
+        </div>
+      </n-spin>
+    </n-modal>
+
   </div>
 </template>
 

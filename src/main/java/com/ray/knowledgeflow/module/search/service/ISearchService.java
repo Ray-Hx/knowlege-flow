@@ -46,6 +46,9 @@ public interface ISearchService {
          */
         void syncContent(ContentItem content);
 
+        /** 删除订阅内容的 Elasticsearch 文档。 */
+        void deleteContentIndex(Long contentId);
+
         /**
          * 搜索笔记文档（包含全文，用于RAG）
          *
@@ -89,4 +92,19 @@ public interface ISearchService {
          * @return 相似笔记的ID列表
          */
         java.util.List<Long> searchSimilarNoteIds(String text, int limit);
+
+        /**
+         * 全局搜索 (同时查笔记和内容，并返回高亮)
+         *
+         * @param keyword 关键词
+         * @param userId  用户ID
+         * @return 搜索结果列表
+         */
+        java.util.List<com.ray.knowledgeflow.module.search.dto.SearchResultDto> globalSearch(String keyword,
+                        Long userId);
+
+        /**
+         * 全量同步所有的内容到 ES
+         */
+        void syncAll();
 }

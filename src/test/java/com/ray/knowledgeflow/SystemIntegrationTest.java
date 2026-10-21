@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ray.knowledgeflow.module.user.dto.LoginDto;
 import com.ray.knowledgeflow.module.user.dto.RegisterDto;
 import com.ray.knowledgeflow.module.user.service.CaptchaService;
-import com.ray.knowledgeflow.security.jwt.JwtUtils;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
@@ -41,6 +41,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "langchain4j.open-ai.api-key=dummy" // Dummy OpenAi key
 })
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@EnabledIfEnvironmentVariable(named = "KNOWLEDGE_FLOW_RUN_INTEGRATION_TESTS", matches = "(?i)true")
 public class SystemIntegrationTest {
 
     @Autowired
@@ -130,7 +131,6 @@ public class SystemIntegrationTest {
         String response = result.getResponse().getContentAsString();
         Map map = objectMapper.readValue(response, Map.class);
         jwtToken = (String) map.get("data");
-        System.out.println("Got Token: " + jwtToken);
     }
 
     @Test

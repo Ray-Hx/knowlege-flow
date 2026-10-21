@@ -3,6 +3,7 @@ package com.ray.knowledgeflow.module.content.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ray.knowledgeflow.common.exception.BusinessException;
+import com.ray.knowledgeflow.common.utils.OutboundUrlValidator;
 import com.ray.knowledgeflow.module.content.dto.ContentSourceDto;
 import com.ray.knowledgeflow.module.content.entity.ContentSource;
 import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
@@ -10,6 +11,7 @@ import com.ray.knowledgeflow.module.content.service.IArXivFetchService;
 import com.ray.knowledgeflow.module.content.service.IContentSourceService;
 import com.ray.knowledgeflow.module.content.service.IGitHubFetchService;
 import com.ray.knowledgeflow.module.content.service.IRssFetchService;
+import com.ray.knowledgeflow.module.content.service.IContentItemService;
 import com.ray.knowledgeflow.module.content.message.ContentFetchMessage;
 import com.ray.knowledgeflow.module.content.message.ContentFetchProducer;
 import lombok.RequiredArgsConstructor;
@@ -17,9 +19,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +43,7 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
     private final IGitHubFetchService gitHubFetchService;
     private final IArXivFetchService arXivFetchService;
     private final ContentFetchProducer contentFetchProducer;
+    private final IContentItemService contentItemService;
 
     @Override
     public List<ContentSourceDto> listByUserId(Long userId) {
@@ -53,6 +59,8 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ContentSourceDto addSource(Long userId, ContentSourceDto dto) {
+        validateSourceUrl(dto.getType(), dto.getUrl());
+
         // 检查是否已存在相同 URL
         long count = this.count(new LambdaQueryWrapper<ContentSource>()
                 .eq(ContentSource::getUserId, userId)
@@ -71,8 +79,8 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
 
         this.save(source);
 
-        // 立即触发一次同步
-        asyncFetch(source);
+        // 首次抓取只在内容源事务成功提交后入队。
+        submitFetchAfterCommit(source);
 
         return toDto(source);
     }
@@ -97,7 +105,9 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
     @Transactional(rollbackFor = Exception.class)
     public void deleteSource(Long userId, Long sourceId) {
         ContentSource source = getAndCheckOwnership(userId, sourceId);
+        int deletedItems = contentItemService.deleteBySource(userId, sourceId);
         this.removeById(source.getId());
+        log.info("删除内容源及关联内容: sourceId={}, items={}", sourceId, deletedItems);
     }
 
     @Override
@@ -111,7 +121,9 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
     @Override
     public void syncNow(Long userId, Long sourceId) {
         ContentSource source = getAndCheckOwnership(userId, sourceId);
-        asyncFetch(source);
+        fetchSynchronously(source);
+        source.setLastSyncTime(LocalDateTime.now());
+        this.updateById(source);
     }
 
     @Override
@@ -148,24 +160,54 @@ public class ContentSourceServiceImpl extends ServiceImpl<ContentSourceMapper, C
         return dto;
     }
 
-    private void asyncFetch(ContentSource source) {
-        // 根据类型调用不同的抓取服务
+    private void fetchSynchronously(ContentSource source) {
         switch (source.getType().toUpperCase()) {
             case "RSS":
-                rssFetchService.fetchAsync(source);
+                rssFetchService.fetch(source);
                 break;
             case "GITHUB":
-                gitHubFetchService.fetchAsync(source);
+                gitHubFetchService.fetch(source);
                 break;
             case "ARXIV":
-                arXivFetchService.fetchAsync(source);
+                arXivFetchService.fetch(source);
                 break;
             default:
-                log.warn("不支持的内容源类型: {}", source.getType());
+                throw new BusinessException(400, "不支持的内容源类型");
         }
+    }
 
-        // 更新最后同步时间
-        source.setLastSyncTime(LocalDateTime.now());
-        this.updateById(source);
+    private void submitFetchAfterCommit(ContentSource source) {
+        Runnable submit = () -> contentFetchProducer.sendFetchTask(new ContentFetchMessage(
+                source.getType(), source.getId(), source.getUserId(), null));
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    submit.run();
+                }
+            });
+        } else {
+            submit.run();
+        }
+    }
+
+    private void validateSourceUrl(String type, String url) {
+        if (type == null || type.isBlank()) {
+            throw new BusinessException(400, "源类型不能为空");
+        }
+        try {
+            switch (type.toUpperCase()) {
+                case "RSS" -> OutboundUrlValidator.requirePublicHttpUrl(url);
+                case "GITHUB" -> OutboundUrlValidator.requireHost(url, true, Set.of("api.github.com"));
+                case "ARXIV" -> OutboundUrlValidator.requireHost(url, false, Set.of("export.arxiv.org"));
+                case "FILE" -> {
+                    // FILE 类型由文件上传链路处理，不发起任意网络请求。
+                }
+                default -> throw new IllegalArgumentException("不支持的内容源类型");
+            }
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, e.getMessage());
+        }
     }
 }

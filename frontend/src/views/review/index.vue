@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { NButton, NIcon, useMessage, NEmpty } from 'naive-ui'
-import { LibraryOutline, TimeOutline, CheckmarkCircleOutline, RefreshOutline } from '@vicons/ionicons5'
+import { TimeOutline, CheckmarkCircleOutline, RefreshOutline } from '@vicons/ionicons5'
 import ReviewSession from './components/ReviewSession.vue'
 import { spacedApi, SpacedStats, ReviewNote } from '@/api/spaced'
 
 const message = useMessage()
 const isReviewing = ref(false)
 const stats = ref<SpacedStats>({
-  totalNotes: 0,
+  totalCards: 0,
   dueToday: 0,
   reviewedToday: 0,
-  masteredNotes: 0
+  masteredCards: 0
 })
 const dueNotes = ref<ReviewNote[]>([])
 const loading = ref(false)
@@ -96,7 +96,7 @@ onMounted(() => {
       </div>
 
       <!-- Stats Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="glass-card p-6 flex flex-col items-center justify-center hover:scale-105 transition-transform">
           <div class="text-gray-500 text-sm mb-2 font-medium uppercase tracking-wider">待复习</div>
           <div class="text-4xl font-bold text-indigo-600">{{ stats.dueToday }}</div>
@@ -106,16 +106,6 @@ onMounted(() => {
           <div class="text-gray-500 text-sm mb-2 font-medium uppercase tracking-wider">今日已复习</div>
           <div class="text-4xl font-bold text-emerald-500">{{ stats.reviewedToday }}</div>
           <n-icon size="24" class="mt-2 text-emerald-400"><CheckmarkCircleOutline /></n-icon>
-        </div>
-        <div class="glass-card p-6 flex flex-col items-center justify-center hover:scale-105 transition-transform">
-          <div class="text-gray-500 text-sm mb-2 font-medium uppercase tracking-wider">总笔记数</div>
-          <div class="text-4xl font-bold text-blue-500">{{ stats.totalNotes }}</div>
-          <n-icon size="24" class="mt-2 text-blue-400"><LibraryOutline /></n-icon>
-        </div>
-        <div class="glass-card p-6 flex flex-col items-center justify-center hover:scale-105 transition-transform">
-          <div class="text-gray-500 text-sm mb-2 font-medium uppercase tracking-wider">已掌握</div>
-          <div class="text-4xl font-bold text-purple-500">{{ stats.masteredNotes }}</div>
-          <div class="text-xs text-purple-400 mt-2">Notes</div>
         </div>
       </div>
 

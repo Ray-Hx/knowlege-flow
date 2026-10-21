@@ -3,17 +3,18 @@ package com.ray.knowledgeflow.module.graph.service.impl;
 import com.ray.knowledgeflow.module.graph.entity.NoteNode;
 import com.ray.knowledgeflow.module.graph.repository.GraphNoteRepository;
 import com.ray.knowledgeflow.module.graph.service.IGraphService;
+import com.ray.knowledgeflow.common.exception.BusinessException;
 import com.ray.knowledgeflow.module.note.entity.NoteEntry;
+import com.ray.knowledgeflow.module.note.service.NoteLinkService;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -29,83 +30,75 @@ public class GraphServiceImpl implements IGraphService {
 
     private final GraphNoteRepository graphRepository;
     private final com.ray.knowledgeflow.module.note.mapper.NoteEntryMapper noteEntryMapper;
+    private final NoteLinkService noteLinkService;
     private final ChatLanguageModel chatModel;
+    @Qualifier("neo4jTransactionTemplate")
+    private final TransactionTemplate neo4jTransactionTemplate;
 
     @Override
-    @Async
-    @Transactional
+    @Transactional(transactionManager = "neo4jTransactionManager", rollbackFor = Exception.class)
     public void syncNote(NoteEntry note, List<Long> linkedNoteIds) {
         log.info("Graph sync started: noteId={}", note.getId());
 
-        try {
-            // 1. 创建或获取当前节点
-            NoteNode currentNode = graphRepository.findById(note.getId())
-                    .orElse(new NoteNode(note.getId(), note.getTitle(), note.getUserId()));
+        // 1. 创建或获取当前节点
+        NoteNode currentNode = graphRepository.findById(note.getId())
+                .orElse(new NoteNode(note.getId(), note.getTitle(), note.getUserId()));
 
-            // 更新标题（如果变更）
-            if (!note.getTitle().equals(currentNode.getTitle())) {
-                currentNode.setTitle(note.getTitle());
-            }
-
-            // 2. 处理关系
-            // 先删除旧关系（简单处理：先作为起点删除所有出边，或者根据业务需求增量更新）
-            // 这里我们选择重新构建：清空 links，重新添加
-            currentNode.getLinks().clear();
-
-            // 3. 构建新关系
-            if (linkedNoteIds != null && !linkedNoteIds.isEmpty()) {
-                List<NoteNode> linkedNotes = graphRepository.findAllById(linkedNoteIds);
-                // 此时 linkedNotes 可能不全（有些目标笔记还没同步到图谱），
-                // 策略：如果目标笔记不在图谱中，是否要自动创建？
-                // 简单起见：只链接已存在的节点，或者创建仅有ID的占位节点（推荐后者，保证关系完整）
-
-                Set<Long> foundIds = new HashSet<>();
-                for (NoteNode linked : linkedNotes) {
-                    currentNode.addLink(linked);
-                    foundIds.add(linked.getId());
-                }
-
-                // 对不存在的节点创建占位符（只有ID和默认标题）
-                for (Long linkId : linkedNoteIds) {
-                    if (!foundIds.contains(linkId)) {
-                        // 注意：这里我们无法得知目标笔记的标题和userId，
-                        // 除非查询 NoteEntry 表。鉴于这是异步方法，可以接受查询。
-                        // 但为了性能，这里暂时只创建最小化节点，或者忽略（取决于业务一致性要求）。
-                        // 假设：syncNote 是在笔记保存时触发，如果引用的笔记尚未同步，图谱中会有断层。
-                        // 改进：创建仅ID节点，后续目标笔记同步时会更新属性。
-                        // 注意 Neo4j OGM 保存行为：如果 ID 存在则更新，否则创建。
-                        NoteNode placeholder = new NoteNode();
-                        placeholder.setId(linkId);
-                        // 标题暂时未知，设为空或ID
-                        placeholder.setTitle("Note " + linkId);
-                        // UserId 未知，可能导致权限过滤问题。
-                        // 最好是在这里查询 NoteEntry 获取详情，或者由调用方传入更详细的 Link 信息。
-                        // 为了简化，这里暂不自动创建缺失节点，只链接已有节点。
-                        // 或者：调用方保证 linkedNoteIds 对应的节点应该存在。
-                        log.warn("Target node not found for linking: from={} to={}", note.getId(), linkId);
-                    }
-                }
-            }
-
-            // 4. 保存
-            graphRepository.save(currentNode);
-            log.info("Graph sync completed: noteId={}", note.getId());
-
-        } catch (Exception e) {
-            log.error("Failed to sync note to graph: noteId={}", note.getId(), e);
+        // 更新标题（如果变更）
+        if (!note.getTitle().equals(currentNode.getTitle())) {
+            currentNode.setTitle(note.getTitle());
         }
+        currentNode.setUserId(note.getUserId());
+
+        // 2. 只替换当前节点的显式出边，保留入边和 AI RELATED。
+        currentNode.getLinks().clear();
+        graphRepository.save(currentNode);
+        graphRepository.deleteOutgoingLinks(note.getId());
+
+        // 3. 构建新关系
+        if (linkedNoteIds != null && !linkedNoteIds.isEmpty()) {
+            for (Long linkId : linkedNoteIds) {
+                NoteEntry target = noteEntryMapper.selectById(linkId);
+                if (target == null || !note.getUserId().equals(target.getUserId())) {
+                    log.warn("Target note missing or not owned by user: from={} to={}", note.getId(), linkId);
+                    continue;
+                }
+                NoteNode linkedNode = graphRepository.findById(linkId)
+                        .orElse(new NoteNode(target.getId(), target.getTitle(), target.getUserId()));
+                linkedNode.setTitle(target.getTitle());
+                linkedNode.setUserId(target.getUserId());
+                graphRepository.save(linkedNode);
+                currentNode.addLink(linkedNode);
+            }
+        }
+
+        // 4. 保存。异常不在此处吞掉，由事务回滚并交给上层记录/重试。
+        graphRepository.save(currentNode);
+        log.info("Graph sync completed: noteId={}", note.getId());
     }
 
     @Override
-    @Async
+    @Transactional(transactionManager = "neo4jTransactionManager", rollbackFor = Exception.class)
     public void deleteNote(Long noteId) {
         log.info("Graph delete started: noteId={}", noteId);
-        try {
-            graphRepository.deleteById(noteId);
-            log.info("Graph delete completed: noteId={}", noteId);
-        } catch (Exception e) {
-            log.error("Failed to delete note from graph: noteId={}", noteId, e);
+        graphRepository.deleteById(noteId);
+        log.info("Graph delete completed: noteId={}", noteId);
+    }
+
+    @Override
+    public int rebuildGraph(Long userId) {
+        int count = noteLinkService.rebuildUserLinks(userId);
+        List<NoteEntry> notes = noteEntryMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NoteEntry>()
+                        .eq(NoteEntry::getUserId, userId)
+                        .orderByAsc(NoteEntry::getId));
+        for (NoteEntry note : notes) {
+            List<Long> targetIds = noteLinkService.getOutgoingTargetIds(userId, note.getId());
+            // 类内直接调用不会经过 @Transactional 代理，因此显式包裹单篇投影。
+            neo4jTransactionTemplate.executeWithoutResult(status -> syncNote(note, targetIds));
         }
+        log.info("Graph explicit projection rebuilt: userId={}, notes={}", userId, count);
+        return count;
     }
 
     @Override
@@ -160,7 +153,8 @@ public class GraphServiceImpl implements IGraphService {
                 if (graphNode.getRelated() != null) {
                     for (com.ray.knowledgeflow.module.graph.entity.RelatedRelation rel : graphNode.getRelated()) {
                         if (rel.getTarget() != null && nodeMap.containsKey(rel.getTarget().getId())) {
-                            target.addRelated(rel.getTarget(), rel.getLabel());
+                            // 使用保留 ID 的方式添加，防止 deduplication
+                            target.addRelated(rel);
                         }
                     }
                 }
@@ -171,7 +165,7 @@ public class GraphServiceImpl implements IGraphService {
     }
 
     @Override
-    public List<NoteNode> getGlobalGraph(int limit) {
+    public List<NoteNode> getCommunityGraph(int limit) {
         // 1. 获取最新发布的公开笔记列表
         List<NoteEntry> publicNotes = noteEntryMapper.selectList(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NoteEntry>()
@@ -219,7 +213,7 @@ public class GraphServiceImpl implements IGraphService {
                 if (graphNode.getRelated() != null) {
                     for (com.ray.knowledgeflow.module.graph.entity.RelatedRelation rel : graphNode.getRelated()) {
                         if (rel.getTarget() != null && nodeMap.containsKey(rel.getTarget().getId())) {
-                            target.addRelated(rel.getTarget(), rel.getLabel());
+                            target.addRelated(rel);
                         }
                     }
                 }
@@ -230,14 +224,12 @@ public class GraphServiceImpl implements IGraphService {
     }
 
     @Override
-    @Transactional // 移除 @Async，改为同步执行，以便返回结果
     public int analyzeRelations(Long userId) {
         return analyzeRelations(userId, msg -> {
         });
     }
 
     @Override
-    @Transactional
     public int analyzeRelations(Long userId, java.util.function.Consumer<String> progressCallback) {
         log.info("Start LLM-based batch analyzing relations for userId={}", userId);
 
@@ -253,14 +245,8 @@ public class GraphServiceImpl implements IGraphService {
             return 0;
         }
 
-        // 清理现有图谱数据，防止重复节点
-        progressCallback.accept("{\"type\":\"progress\", \"current\":1, \"total\":4, \"message\":\"正在清理旧数据...\"}");
-        try {
-            graphRepository.deleteAllByUserId(userId);
-            log.info("Cleared existing graph data for userId={}", userId);
-        } catch (Exception e) {
-            log.warn("Failed to clear graph data: {}", e.getMessage());
-        }
+        // 显式 LINKS_TO 是用户数据，AI 分析绝不能删除；等模型成功返回后只替换 RELATED。
+        progressCallback.accept("{\"type\":\"progress\", \"current\":1, \"total\":4, \"message\":\"正在读取现有关系...\"}");
 
         progressCallback.accept("{\"type\":\"progress\", \"current\":2, \"total\":4, \"message\":\"正在准备笔记数据...\"}");
 
@@ -292,74 +278,15 @@ public class GraphServiceImpl implements IGraphService {
         try {
             // 单次 LLM 调用
             String response = chatModel.generate(prompt);
-            log.info("LLM batch response: {}", response);
+            log.debug("LLM batch relation response received, length={}", response == null ? 0 : response.length());
 
             progressCallback.accept("{\"type\":\"progress\", \"current\":4, \"total\":4, \"message\":\"正在建立关联关系...\"}");
 
-            // 4. 解析响应并建立关联
-            int newRelations = 0;
-            if (response != null && !response.trim().isEmpty() && !response.contains("无")) {
-                String[] lines = response.split("\n");
-                for (String line : lines) {
-                    line = line.trim();
-                    if (line.contains("->")) {
-                        String[] parts = line.split("->");
-                        if (parts.length == 2) {
-                            try {
-                                // 解析格式: sourceId->targetId:关系标签
-                                String sourcePart = parts[0].replaceAll("[^0-9]", "");
-                                String targetPart = parts[1];
-                                String label = "相关"; // 默认标签
-
-                                if (targetPart.contains(":")) {
-                                    String[] targetLabel = targetPart.split(":", 2);
-                                    targetPart = targetLabel[0].replaceAll("[^0-9]", "");
-                                    label = targetLabel[1].trim();
-                                } else {
-                                    targetPart = targetPart.replaceAll("[^0-9]", "");
-                                }
-
-                                Long sourceId = Long.parseLong(sourcePart);
-                                Long targetId = Long.parseLong(targetPart);
-
-                                if (sourceId.equals(targetId))
-                                    continue;
-                                if (!noteMap.containsKey(sourceId) || !noteMap.containsKey(targetId))
-                                    continue;
-
-                                NoteEntry sourceNote = noteMap.get(sourceId);
-                                NoteEntry targetNote = noteMap.get(targetId);
-
-                                // 获取或创建 source 节点
-                                NoteNode sourceNode = graphRepository.findById(sourceId)
-                                        .orElse(new NoteNode(sourceId, sourceNote.getTitle(), sourceNote.getUserId()));
-
-                                // 获取或创建 target 节点
-                                NoteNode targetNode = graphRepository.findById(targetId).orElse(null);
-                                if (targetNode == null) {
-                                    targetNode = new NoteNode(targetId, targetNote.getTitle(), targetNote.getUserId());
-                                    graphRepository.save(targetNode);
-                                }
-
-                                // 检查是否已链接
-                                boolean linked = sourceNode.getLinks() != null && sourceNode.getLinks().stream()
-                                        .anyMatch(l -> l.getId().equals(targetId));
-                                boolean related = sourceNode.hasRelatedTo(targetId);
-
-                                if (!linked && !related) {
-                                    sourceNode.addRelated(targetNode, label);
-                                    graphRepository.save(sourceNode);
-                                    newRelations++;
-                                    log.info("LLM Auto-link: {} -> {} ({})", sourceNote.getTitle(),
-                                            targetNote.getTitle(), label);
-                                }
-                            } catch (NumberFormatException e) {
-                                // 忽略无效行
-                            }
-                        }
-                    }
-                }
-            }
+            // 外部 LLM 调用不占用 Neo4j 事务；只在替换关系时开启短事务。
+            List<RelatedPlan> relationPlans = parseRelatedPlans(response, noteMap);
+            Integer written = neo4jTransactionTemplate.execute(
+                    status -> replaceRelatedRelations(userId, noteMap, relationPlans));
+            int newRelations = written == null ? 0 : written;
 
             log.info("LLM Batch Analysis completed. Created {} new relations.", newRelations);
             progressCallback.accept(String.format("{\"type\":\"complete\", \"count\":%d}", newRelations));
@@ -367,9 +294,98 @@ public class GraphServiceImpl implements IGraphService {
 
         } catch (Exception e) {
             log.error("LLM batch analysis failed", e);
-            progressCallback.accept("{\"type\":\"complete\", \"count\":0}");
-            return 0;
+            progressCallback.accept("{\"type\":\"error\", \"message\":\"关联分析失败\"}");
+            throw new BusinessException(502, "AI 关联分析失败，原有关系已保留");
         }
+    }
+
+    private List<RelatedPlan> parseRelatedPlans(
+            String response,
+            java.util.Map<Long, NoteEntry> noteMap) {
+        if (response == null || response.trim().isEmpty()) {
+            throw new IllegalArgumentException("AI 返回了空的关联结果");
+        }
+        String normalized = response.trim();
+        if ("无".equals(normalized)) {
+            return List.of();
+        }
+
+        List<RelatedPlan> plans = new java.util.ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String rawLine : normalized.split("\n")) {
+            String line = rawLine.trim();
+            if (!line.contains("->")) {
+                continue;
+            }
+            String[] parts = line.split("->", 2);
+            try {
+                String sourcePart = parts[0].replaceAll("[^0-9]", "");
+                String targetPart = parts[1];
+                String label = "相关";
+                if (targetPart.contains(":")) {
+                    String[] targetLabel = targetPart.split(":", 2);
+                    targetPart = targetLabel[0].replaceAll("[^0-9]", "");
+                    String candidate = targetLabel[1].trim();
+                    if (!candidate.isEmpty()) {
+                        label = candidate.substring(0, Math.min(candidate.length(), 20));
+                    }
+                } else {
+                    targetPart = targetPart.replaceAll("[^0-9]", "");
+                }
+
+                Long sourceId = Long.parseLong(sourcePart);
+                Long targetId = Long.parseLong(targetPart);
+                String key = sourceId + "->" + targetId;
+                if (!sourceId.equals(targetId)
+                        && noteMap.containsKey(sourceId)
+                        && noteMap.containsKey(targetId)
+                        && seen.add(key)) {
+                    plans.add(new RelatedPlan(sourceId, targetId, label));
+                }
+            } catch (NumberFormatException ignored) {
+                // 继续尝试其他行，最终统一验证是否得到可用关系。
+            }
+        }
+
+        if (plans.isEmpty()) {
+            throw new IllegalArgumentException("AI 关联结果格式无效");
+        }
+        return plans;
+    }
+
+    private int replaceRelatedRelations(
+            Long userId,
+            java.util.Map<Long, NoteEntry> noteMap,
+            List<RelatedPlan> relationPlans) {
+        // 模型调用成功后，只替换 AI 推断关系，保留用户显式链接与全部节点。
+        graphRepository.deleteRelatedByUserId(userId);
+
+        int newRelations = 0;
+        for (RelatedPlan plan : relationPlans) {
+                Long sourceId = plan.sourceId();
+                Long targetId = plan.targetId();
+                NoteEntry sourceNote = noteMap.get(sourceId);
+                NoteEntry targetNote = noteMap.get(targetId);
+                NoteNode sourceNode = graphRepository.findById(sourceId)
+                        .orElse(new NoteNode(sourceId, sourceNote.getTitle(), sourceNote.getUserId()));
+                NoteNode targetNode = graphRepository.findById(targetId).orElse(null);
+                if (targetNode == null) {
+                    targetNode = new NoteNode(targetId, targetNote.getTitle(), targetNote.getUserId());
+                    graphRepository.save(targetNode);
+                }
+
+                boolean linked = sourceNode.getLinks() != null && sourceNode.getLinks().stream()
+                        .anyMatch(link -> link.getId().equals(targetId));
+                if (!linked && !sourceNode.hasRelatedTo(targetId)) {
+                    sourceNode.addRelated(targetNode, plan.label());
+                    graphRepository.save(sourceNode);
+                    newRelations++;
+                }
+        }
+        return newRelations;
+    }
+
+    private record RelatedPlan(Long sourceId, Long targetId, String label) {
     }
 
     /**

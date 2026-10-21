@@ -149,7 +149,8 @@ public class SM2Algorithm {
         result.setNewRepetitionCount(0);
         result.setNewIntervalDays(0);
         result.setNewEasinessFactor(INITIAL_EF);
-        result.setNextReviewTime(LocalDateTime.now());
+        // 设置为1分钟前，确保初始化后立即可被复习
+        result.setNextReviewTime(LocalDateTime.now().minusMinutes(1));
         return result;
     }
 

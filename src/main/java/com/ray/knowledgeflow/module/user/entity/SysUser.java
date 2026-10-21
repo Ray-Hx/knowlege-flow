@@ -1,6 +1,7 @@
 package com.ray.knowledgeflow.module.user.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -34,6 +35,7 @@ public class SysUser implements Serializable {
     /**
      * 加密密码
      */
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     /**

@@ -9,6 +9,7 @@ import com.ray.knowledgeflow.module.user.dto.UserProfileDto;
 import com.ray.knowledgeflow.module.user.entity.SysUser;
 import com.ray.knowledgeflow.module.user.service.IUserProfileService;
 import com.ray.knowledgeflow.module.user.service.IUserService;
+import com.ray.knowledgeflow.common.exception.BusinessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -36,15 +37,14 @@ public class PublicController {
     public Result<PublicUserProfileDto> getPublicProfile(@PathVariable String username) {
         SysUser user = userService.getByUsername(username);
         if (user == null) {
-            return Result.failed("用户不存在");
+            throw new BusinessException(404, "用户不存在");
+        }
+
+        if (!userProfileService.isPublicProfile(user.getId())) {
+            throw new BusinessException(404, "用户不存在或个人主页未公开");
         }
 
         UserProfileDto profile = userProfileService.getProfile(user.getId());
-
-        // TODO: Check if profile is public based on isPublic field in SysUserProfile
-        // Currently we don't have isPublic in UserProfileDto returned by getProfile,
-        // we might strictly fetch entity if we want to enforce it.
-        // For strictly public controller, we should enforce checking isPublic=1.
 
         PublicUserProfileDto dto = new PublicUserProfileDto();
         dto.setUsername(user.getUsername());
@@ -66,7 +66,7 @@ public class PublicController {
 
         SysUser user = userService.getByUsername(username);
         if (user == null) {
-            return Result.failed("用户不存在");
+            throw new BusinessException(404, "用户不存在");
         }
 
         return Result.success(noteService.listPublicNotes(user.getId(), page, size));

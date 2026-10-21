@@ -10,7 +10,6 @@ import com.ray.knowledgeflow.module.user.mapper.UserProfileMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 初始化 Admin 用户数据
  */
 @Slf4j
-@Configuration
+// @Configuration  // 暂时禁用：sys_role 表不存在，无需角色初始化
 @RequiredArgsConstructor
 public class AdminDataInitializer implements CommandLineRunner {
 
@@ -68,7 +67,11 @@ public class AdminDataInitializer implements CommandLineRunner {
             SysUserProfile profile = new SysUserProfile();
             profile.setUserId(user.getId());
             profile.setBio("系统管理员");
-            profile.setPreferences("{\"theme\":\"light\",\"language\":\"zh-CN\"}");
+            com.ray.knowledgeflow.module.user.dto.UserSettingsDto settings = new com.ray.knowledgeflow.module.user.dto.UserSettingsDto();
+            settings.setUiSettings(new com.ray.knowledgeflow.module.user.dto.UserSettingsDto.UiSettings());
+            settings.getUiSettings().setTheme("light");
+            settings.getUiSettings().setLanguage("zh-CN");
+            profile.setPreferences(settings);
             userProfileMapper.insert(profile);
 
             log.info("初始化管理员用户: admin / admin123");

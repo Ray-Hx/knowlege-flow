@@ -24,6 +24,14 @@ export interface Recommendation {
     url?: string;
 }
 
+export interface GlobalSearchResult {
+    id: string;
+    type: 'NOTE' | 'CONTENT';
+    title: string;
+    snippet: string;
+    updateTime: string;
+}
+
 export const searchApi = {
     search(keyword: string, page = 1, size = 10) {
         return request.get<any, { content: SearchResult[], totalElements: number }>('/search/notes', {
@@ -34,6 +42,12 @@ export const searchApi = {
     getRecommendations(limit = 10) {
         return request.get<any, Recommendation[]>('/search/recommendations', {
             params: { limit }
+        })
+    },
+
+    globalSearch(keyword: string) {
+        return request.get<any, GlobalSearchResult[]>('/search/global', {
+            params: { keyword }
         })
     }
 }

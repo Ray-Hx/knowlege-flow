@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue'
-import { useMessage, NButton, NSpin, NIcon, NScrollbar, NAvatar, NTooltip } from 'naive-ui'
-import { Send, ChatbubbleEllipsesOutline, TrashOutline, DocumentTextOutline, Add, SparklesOutline, SyncOutline } from '@vicons/ionicons5'
+import { useMessage, NButton, NSpin, NIcon, NScrollbar, NAvatar, NTooltip, NTag } from 'naive-ui'
+import { Send, TrashOutline, DocumentTextOutline, Add, SyncOutline, BookOutline } from '@vicons/ionicons5'
+import ArticleViewerModal from '@/components/common/ArticleViewerModal.vue'
 import { aiApi, Conversation, Message } from '@/api/ai'
 import { noteApi } from '@/api/note'
 import { useUserStore } from '@/store/user'
@@ -20,6 +21,17 @@ const loadingMessages = ref(false)
 const syncing = ref(false)
 const messageListRef = ref<any>(null)
 const messageRefs = ref<Record<number, HTMLElement>>({})
+const articleModalRef = ref<any>(null)
+
+// 自动滚动锁定
+const isAutoScrollLocked = ref(false)
+const handleScroll = (e: any) => {
+  const el = e.target
+  if (!el) return
+  // 如果距离底部超过 100px，则锁定自动滚动
+  const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+  isAutoScrollLocked.value = !isAtBottom
+}
 
 // 用户头像（从 store 获取）
 const userAvatar = ref(userStore.userInfo?.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png')
@@ -64,7 +76,7 @@ const fetchConversations = async () => {
     if (!currentConversationId.value && conversations.value.length > 0) {
       selectConversation(conversations.value[0].id)
     }
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '加载对话列表失败')
   } finally {
     loadingConversations.value = false
@@ -79,7 +91,7 @@ const selectConversation = async (id: number) => {
   try {
     messages.value = await aiApi.getMessages(id)
     scrollToBottom()
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '加载消息失败')
   } finally {
     loadingMessages.value = false
@@ -91,7 +103,7 @@ const createConversation = async () => {
     const conv = await aiApi.createConversation(`新对话 ${new Date().toLocaleString()}`)
     conversations.value.unshift(conv)
     selectConversation(conv.id)
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '创建对话失败')
   }
 }
@@ -109,7 +121,7 @@ const deleteConversation = async (e: Event, id: number) => {
       }
     }
     message.success('已删除')
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '删除失败')
   }
 }
@@ -132,20 +144,58 @@ const handleSend = async () => {
   scrollToBottom()
 
   try {
-    const aiMsg = await aiApi.sendMessage(currentConversationId.value, userMsg)
-    messages.value.push(aiMsg)
+    // 直接用非流式接口，保证可靠性
+    const aiResponse = await aiApi.sendMessage(currentConversationId.value, userMsg)
+
+    // 用打字机效果逐步显示 AI 回复
+    messages.value.push({
+      id: aiResponse.id,
+      role: 'assistant',
+      content: '',
+      references: aiResponse.references,
+      createdTime: aiResponse.createdTime
+    })
+    const reactiveIdx = messages.value.length - 1
     scrollToBottom()
-  } catch (e) {
-    message.error(e.message || '发送消息失败')
+
+    const fullText = aiResponse.content
+    let i = 0
+    // 开始打字前先滚动到底部（强制，smooth）
+    scrollToBottom('smooth', true)
+    
+    await new Promise<void>((resolve) => {
+      const timer = setInterval(() => {
+        const step = Math.min(3, fullText.length - i)
+        messages.value[reactiveIdx].content += fullText.substring(i, i + step)
+        i += step
+        
+        // 打字过程中使用 instant 滚动，避免 smooth 滚动导致的上下跳动（jitter）
+        scrollToBottom('instant')
+        
+        if (i >= fullText.length) {
+          clearInterval(timer)
+          // 打字结束最后润色一下
+          nextTick(() => scrollToBottom('smooth'))
+          resolve()
+        }
+      }, 30) // 适当调大间隔，降低 CPU 压力
+    })
+  } catch (e: any) {
+    message.error(e.message || '发送消息请求失败')
   } finally {
     sending.value = false
   }
 }
 
-const scrollToBottom = () => {
+const scrollToBottom = (behavior: ScrollBehavior = 'smooth', force = false) => {
+  if (isAutoScrollLocked.value && !force) return
+  
   nextTick(() => {
     if (messageListRef.value) {
-      messageListRef.value.scrollTo({ top: 99999, behavior: 'smooth' })
+      const el = messageListRef.value.$el || messageListRef.value
+      // 如果是 n-scrollbar，通常需要获取容器
+      const container = el.querySelector('.n-scrollbar-container') || el
+      container.scrollTo({ top: container.scrollHeight, behavior })
     }
   })
 }
@@ -162,10 +212,16 @@ const syncNotesToKnowledge = async () => {
   try {
     const count = await noteApi.rebuildIndex()
     message.success(`已同步 ${count} 条笔记到知识库`)
-  } catch (e) {
+  } catch (e: any) {
     message.error(e.message || '同步失败，请稍后重试')
   } finally {
     syncing.value = false
+  }
+}
+
+const openArticle = (id: number) => {
+  if (articleModalRef.value) {
+    articleModalRef.value.open(id)
   }
 }
 
@@ -236,7 +292,7 @@ onMounted(() => {
     <div class="flex-1 flex flex-col h-full glass-card overflow-hidden relative">
       <div v-if="!currentConversationId" class="flex-1 flex items-center justify-center text-gray-400 flex-col">
         <div class="w-24 h-24 bg-gradient-to-tr from-indigo-100 to-purple-100 rounded-full flex items-center justify-center mb-6 animate-pulse">
-          <n-icon size="48" class="text-indigo-400"><ChatbubbleEllipsesOutline /></n-icon>
+          <n-icon size="48" class="text-indigo-400"><BookOutline /></n-icon>
         </div>
         <p class="text-lg font-medium text-gray-600">开始一次新的对话</p>
         <p class="text-sm opacity-60 mt-2">基于您的个人知识库提供智能问答</p>
@@ -244,7 +300,7 @@ onMounted(() => {
 
       <template v-else>
         <!-- Messages -->
-        <n-scrollbar ref="messageListRef" class="flex-1 p-6" trigger="none">
+        <n-scrollbar ref="messageListRef" class="flex-1 p-6" trigger="none" @scroll="handleScroll">
           <n-spin :show="loadingMessages">
             <div class="space-y-6 pb-4 max-w-4xl mx-auto">
               <div 
@@ -264,9 +320,9 @@ onMounted(() => {
                   />
                   <div 
                     v-else 
-                    class="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center shadow-md border-2 border-white"
+                    class="w-10 h-10 rounded-full bg-gray-900 flex items-center justify-center shadow-md border-2 border-white"
                   >
-                    <n-icon size="20" color="white"><SparklesOutline /></n-icon>
+                    <n-icon size="20" color="white"><BookOutline /></n-icon>
                   </div>
                 </div>
 
@@ -292,23 +348,30 @@ onMounted(() => {
                   </div>
                   
                   <!-- References -->
-                  <div v-if="msg.references && msg.references.length > 0" class="mt-3 pt-3 border-t border-gray-200/50 px-4 pb-4">
-                    <div class="text-xs text-gray-500 mb-2 font-bold flex items-center gap-1">
-                      <n-icon><DocumentTextOutline /></n-icon> 参考资料
-                    </div>
-                    <div class="grid grid-cols-1 gap-2">
-                      <div 
-                        v-for="ref in msg.references" 
-                        :key="ref.noteId" 
-                        class="text-xs bg-gray-50 p-2 rounded-lg cursor-pointer hover:bg-indigo-50 transition-colors border border-gray-100"
-                      >
-                        <router-link :to="`/notes/${ref.noteId}`" class="font-bold text-indigo-600 hover:underline block mb-1">
-                          {{ ref.title }}
-                        </router-link>
-                        <p class="truncate text-gray-500">{{ ref.snippet }}</p>
+                    <div v-if="msg.references && msg.references.length > 0" class="mt-3 pt-3 border-t border-gray-200/50 px-4 pb-4">
+                      <div class="text-xs text-gray-500 mb-2 font-bold flex items-center gap-1">
+                        <n-icon><DocumentTextOutline /></n-icon> 参考资料
+                      </div>
+                      <div class="grid grid-cols-1 gap-2">
+                        <div 
+                          v-for="ref in msg.references" 
+                          :key="ref.noteId" 
+                          class="text-xs bg-gray-50 p-2 rounded-lg transition-colors border border-gray-100 cursor-pointer hover:bg-indigo-50"
+                          @click="ref.sourceType === 'NOTE' ? null : openArticle(ref.noteId)"
+                        >
+                          <router-link v-if="ref.sourceType === 'NOTE'" :to="`/notes/${ref.noteId}`" class="font-bold text-indigo-600 hover:underline block mb-1" @click.stop>
+                            {{ ref.title }} <n-tag size="tiny" :bordered="false" type="info" class="ml-1">笔记</n-tag>
+                          </router-link>
+                          <div v-else class="font-bold text-indigo-600 block mb-1">
+                            {{ ref.title }} 
+                            <n-tag v-if="ref.subType === 'UPLOAD'" size="tiny" :bordered="false" type="success" class="ml-1">内容聚合</n-tag>
+                            <n-tag v-else-if="ref.subType === 'FEED'" size="tiny" :bordered="false" type="warning" class="ml-1">订阅源</n-tag>
+                            <n-tag v-else size="tiny" :bordered="false" type="info" class="ml-1">知识库</n-tag>
+                          </div>
+                          <p class="truncate text-gray-500">{{ ref.snippet }}</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
                 </div>
               </div>
             </div>
@@ -322,7 +385,7 @@ onMounted(() => {
               <textarea
                 v-model="input"
                 class="w-full bg-white/60 border border-white/50 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:bg-white/80 transition-all resize-none text-gray-700 placeholder-gray-400"
-                placeholder="输入你的问题... (Shift+Enter 换行)"
+                placeholder="输入你的问题..."
                 rows="1"
                 @keydown.enter.prevent="(e) => { if(!e.shiftKey) handleSend() }"
                 style="min-height: 48px; max-height: 120px;"
@@ -340,6 +403,7 @@ onMounted(() => {
         </div>
       </template>
     </div>
+    <ArticleViewerModal ref="articleModalRef" />
   </div>
 </template>
 

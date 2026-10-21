@@ -3,25 +3,15 @@
     <!-- 头部搜索区 -->
     <div class="flex justify-between items-center mb-8">
       <div>
-        <h1 class="text-2xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-          社区大厅
-        </h1>
         <p class="text-gray-500 mt-1">发现优秀的公开笔记与知识</p>
       </div>
       <div class="flex items-center gap-4">
-        <n-button
-          type="primary"
-          secondary
-          size="large"
-          round
-          @click="router.push('/community/galaxy')"
-          class="flex shadow-sm hover:shadow transition-shadow px-5 group"
-        >
-          <template #icon>
-            <span class="group-hover:scale-110 transition-transform">🌌</span>
-          </template>
-          知识银河星云
-        </n-button>
+<!--        <n-button type="primary" secondary @click="router.push('/community/galaxy')">-->
+<!--          <template #icon>-->
+<!--            <n-icon><PlanetOutline /></n-icon>-->
+<!--          </template>-->
+<!--          知识星空-->
+<!--        </n-button>-->
         
         <div class="w-96">
           <n-input
@@ -47,7 +37,7 @@
     <div class="flex-1 flex gap-6 overflow-hidden">
       
       <!-- 左瀑布流 -->
-      <div class="flex-1 flex flex-col overflow-hidden bg-white/50 rounded-2xl p-2 border border-gray-100 shadow-sm backdrop-blur-sm">
+      <div class="flex-1 flex flex-col overflow-hidden bg-white/90 rounded-2xl p-2 border border-gray-200 shadow-sm backdrop-blur-md">
         
         <n-tabs v-model:value="activeTab" type="line" animated class="px-2" @update:value="handleTabChange">
           <n-tab-pane name="all" tab="🌍 推荐广场">
@@ -79,7 +69,7 @@
               <n-avatar
                 round
                 size="small"
-                :src="note.authorAvatar || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'"
+                :src="note.authorAvatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'"
                 class="border border-gray-100 cursor-pointer"
               />
               <span class="text-sm text-gray-600 font-medium truncate hover:text-indigo-600 cursor-pointer transition-colors">{{ note.authorName || '匿名用户' }}</span>
@@ -147,7 +137,7 @@
       </div>
 
       <!-- 右侧社区热榜 -->
-      <div class="w-[320px] flex-shrink-0 hidden lg:flex flex-col bg-white rounded-2xl border border-gray-100 p-5 shadow-sm overflow-hidden h-fit max-h-full">
+      <div class="w-[320px] flex-shrink-0 hidden lg:flex flex-col bg-white rounded-2xl border border-gray-200 p-5 shadow-sm overflow-hidden h-fit max-h-full">
         <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
           <span class="text-orange-500">🔥</span> 社区热议榜
         </h2>
@@ -198,6 +188,9 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { NInput, NIcon, NAvatar, NSpin, NPagination, useMessage, NButton, NTabs, NTabPane, NInputNumber } from 'naive-ui'
+import { PlanetOutline } from '@vicons/ionicons5'
+
+// 组件引用
 import { getCommunityFeed, getRanking, getFollowingFeed } from '@/api/community'
 import type { Note } from '@/api/note'
 import dayjs from 'dayjs'

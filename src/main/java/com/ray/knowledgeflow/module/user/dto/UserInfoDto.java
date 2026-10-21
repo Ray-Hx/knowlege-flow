@@ -56,7 +56,7 @@ public class UserInfoDto {
     /**
      * 用户偏好设置 (JSON)
      */
-    private String preferences;
+    private UserSettingsDto preferences;
 
     /**
      * 学习目标 (JSON)

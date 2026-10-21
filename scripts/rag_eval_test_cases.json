@@ -1,0 +1,538 @@
+[
+  {
+    "id": "KF-RAG-001",
+    "query": "KnowledgeFlow 使用什么后端和前端技术栈？",
+    "category": "精确命中",
+    "difficulty": "easy",
+    "gold_answer": "KnowledgeFlow 是一个使用 Spring Boot 后端和 Vue 前端的知识管理平台。",
+    "gold_keywords": [
+      "Spring Boot",
+      "Vue",
+      "知识管理平台"
+    ],
+    "gold_topic": "系统技术栈",
+    "rerank_expected": "问题与项目事实高度一致，向量召回应能直接命中核心描述，reranker 主要用于将明确包含 Spring Boot 和 Vue 的片段排到前列。"
+  },
+  {
+    "id": "KF-RAG-002",
+    "query": "KnowledgeFlow 的 RAG 检索流程是什么？",
+    "category": "精确命中",
+    "difficulty": "easy",
+    "gold_answer": "KnowledgeFlow 的 RAG 流程是 query embedding 后从 Qdrant content_chunks 召回候选，再由 CrossEncoder bge-reranker-v2-m3 重排并取 Top-5。",
+    "gold_keywords": [
+      "query embedding",
+      "Qdrant",
+      "content_chunks",
+      "bge-reranker-v2-m3",
+      "Top-5"
+    ],
+    "gold_topic": "RAG 检索流程",
+    "rerank_expected": "流程涉及多个连续阶段，reranker 有助于优先选择同时描述召回、重排和 Top-5 的完整片段，而非只包含单个组件名称的片段。"
+  },
+  {
+    "id": "KF-RAG-003",
+    "query": "RAG 召回的 candidate-size、top-k 和 score-threshold 分别是多少？",
+    "category": "精确命中",
+    "difficulty": "easy",
+    "gold_answer": "RAG 的 candidate-size 是 20，top-k 是 5，score-threshold 是 0.5。",
+    "gold_keywords": [
+      "20",
+      "5",
+      "0.5",
+      "candidate-size",
+      "top-k",
+      "score-threshold"
+    ],
+    "gold_topic": "RAG 检索参数",
+    "rerank_expected": "多个数值参数可能分散在相邻配置片段中，reranker 可以提高完整包含三个参数及对应数值的片段排名。"
+  },
+  {
+    "id": "KF-RAG-004",
+    "query": "KnowledgeFlow 的向量维度是多少？",
+    "category": "精确命中",
+    "difficulty": "easy",
+    "gold_answer": "KnowledgeFlow 使用的向量维度是 2048。",
+    "gold_keywords": [
+      "2048",
+      "向量维度"
+    ],
+    "gold_topic": "向量配置",
+    "rerank_expected": "该问题短且精确，通常无需强依赖 reranker，但 reranker 可避免将其他数值配置误排到向量维度之前。"
+  },
+  {
+    "id": "KF-RAG-005",
+    "query": "这个系统的知识检索不是直接把向量搜索结果返回吧，它后面还会再做一次相关性排序吗？",
+    "category": "同义改写",
+    "difficulty": "easy",
+    "gold_answer": "是的，Qdrant 召回候选后还会使用 CrossEncoder bge-reranker-v2-m3 进行重排，再取 Top-5。",
+    "gold_keywords": [
+      "Qdrant",
+      "CrossEncoder",
+      "bge-reranker-v2-m3",
+      "重排",
+      "Top-5"
+    ],
+    "gold_topic": "RAG 重排机制",
+    "rerank_expected": "query 使用了“相关性排序”等口语化表达而非配置中的 reranker 原词，reranker 有助于识别语义等价的重排描述。"
+  },
+  {
+    "id": "KF-RAG-006",
+    "query": "KnowledgeFlow 是不是一个前后端分离的知识管理应用，后端用 Java 生态，前端用 Vue？",
+    "category": "同义改写",
+    "difficulty": "easy",
+    "gold_answer": "KnowledgeFlow 是使用 Spring Boot 后端和 Vue 前端的知识管理平台。",
+    "gold_keywords": [
+      "Spring Boot",
+      "Vue",
+      "知识管理平台"
+    ],
+    "gold_topic": "系统技术栈",
+    "rerank_expected": "问题使用“Java 生态”和“知识管理应用”等改写表达，reranker 可以提高与 Spring Boot 和 Vue 技术栈事实的语义匹配。"
+  },
+  {
+    "id": "KF-RAG-007",
+    "query": "系统里的复习计划采用哪一种基于遗忘规律的间隔复习方法？",
+    "category": "同义改写",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 使用 SM-2 间隔重复算法。",
+    "gold_keywords": [
+      "SM-2",
+      "间隔重复"
+    ],
+    "gold_topic": "间隔重复",
+    "rerank_expected": "query 没有直接出现 SM-2，而是描述其用途，reranker 对这种概念到术语的语义匹配较有价值。"
+  },
+  {
+    "id": "KF-RAG-008",
+    "query": "新内容的索引处理是不是通过消息机制异步完成，而不是全部同步阻塞执行？",
+    "category": "同义改写",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 支持通过消息进行异步索引。",
+    "gold_keywords": [
+      "消息",
+      "异步索引"
+    ],
+    "gold_topic": "异步索引",
+    "rerank_expected": "问题以同步与异步的行为差异描述事实，reranker 可以将真正讨论异步索引的片段与仅提到 RabbitMQ 的片段区分开。"
+  },
+  {
+    "id": "KF-RAG-009",
+    "query": "KF 的 RAG 里 CE 模型具体是哪一个？",
+    "category": "术语缩写",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 的 CrossEncoder 模型是 BAAI/bge-reranker-v2-m3。",
+    "gold_keywords": [
+      "CrossEncoder",
+      "bge-reranker-v2-m3"
+    ],
+    "gold_topic": "Reranker 模型",
+    "rerank_expected": "query 使用 KF 和 CE 缩写，向量召回可能匹配不稳定，reranker 有助于根据上下文确认 CE 指 CrossEncoder reranker。"
+  },
+  {
+    "id": "KF-RAG-010",
+    "query": "本地 RR 在 MPS 上用什么精度跑？",
+    "category": "术语缩写",
+    "difficulty": "medium",
+    "gold_answer": "本地 reranker 使用 MPS 并以 fp16 精度运行。",
+    "gold_keywords": [
+      "reranker",
+      "MPS",
+      "fp16"
+    ],
+    "gold_topic": "Reranker 推理配置",
+    "rerank_expected": "RR 是非标准缩写，召回可能混入其他运行配置，reranker 可以利用 MPS 和精度语义将正确片段提前。"
+  },
+  {
+    "id": "KF-RAG-011",
+    "query": "KG 功能依赖的图相关组件是什么，同时系统是否支持双链？",
+    "category": "术语缩写",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 使用 Neo4j 支持知识图谱，并支持笔记双向链接。",
+    "gold_keywords": [
+      "Neo4j",
+      "知识图谱",
+      "双向链接"
+    ],
+    "gold_topic": "知识图谱与笔记链接",
+    "rerank_expected": "问题将 KG 缩写与双向链接两个概念组合，reranker 有助于把同时覆盖知识图谱和笔记链接的相关片段排到前面。"
+  },
+  {
+    "id": "KF-RAG-012",
+    "query": "RAG 最后返回的 K 是多少，初始候选 N 又是多少？",
+    "category": "术语缩写",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 的最终 top-k 是 5，初始 candidate-size 是 20。",
+    "gold_keywords": [
+      "top-k",
+      "5",
+      "candidate-size",
+      "20"
+    ],
+    "gold_topic": "RAG 检索参数",
+    "rerank_expected": "query 使用抽象符号 K 和 N 代替真实参数名，reranker 可帮助识别讨论最终结果数量和候选数量的配置片段。"
+  },
+  {
+    "id": "KF-RAG-013",
+    "query": "一个查询从生成向量开始，到最后得到 5 个精排结果，中间依次经过哪些组件？",
+    "category": "跨段多跳推理",
+    "difficulty": "hard",
+    "gold_answer": "查询先进行 query embedding，再从 Qdrant content_chunks 召回候选，然后通过 CrossEncoder bge-reranker-v2-m3 重排，最终取 Top-5。",
+    "gold_keywords": [
+      "query embedding",
+      "Qdrant",
+      "content_chunks",
+      "CrossEncoder",
+      "bge-reranker-v2-m3",
+      "Top-5"
+    ],
+    "gold_topic": "RAG 端到端流程",
+    "rerank_expected": "完整答案包含 embedding、向量召回、CrossEncoder 和 Top-5 多个阶段，信息可能跨多个片段，reranker 对完整流程片段的排序尤为重要。"
+  },
+  {
+    "id": "KF-RAG-014",
+    "query": "如果一段正文进入 KnowledgeFlow，它在语义分块阶段受到哪些长度和断点参数约束？",
+    "category": "跨段多跳推理",
+    "difficulty": "hard",
+    "gold_answer": "语义分块使用 breakpoint-percentile=85、min-chars=80、max-chars=1000 和 buffer-size=1。",
+    "gold_keywords": [
+      "breakpoint-percentile",
+      "85",
+      "min-chars",
+      "80",
+      "max-chars",
+      "1000",
+      "buffer-size",
+      "1"
+    ],
+    "gold_topic": "语义分块参数",
+    "rerank_expected": "答案需要聚合四个不同参数，候选中容易出现只包含部分数值的片段，reranker 可优先选择参数最完整的上下文。"
+  },
+  {
+    "id": "KF-RAG-015",
+    "query": "从知识内容组织到复习，KnowledgeFlow 分别提供了哪些图结构能力和学习记忆能力？",
+    "category": "跨段多跳推理",
+    "difficulty": "hard",
+    "gold_answer": "KnowledgeFlow 支持笔记双向链接和知识图谱，并使用 SM-2 进行间隔重复。",
+    "gold_keywords": [
+      "双向链接",
+      "知识图谱",
+      "SM-2",
+      "间隔重复"
+    ],
+    "gold_topic": "知识组织与学习管理",
+    "rerank_expected": "问题跨越笔记链接、知识图谱和间隔重复三个功能域，reranker 有助于组合语义相关但词面不同的片段。"
+  },
+  {
+    "id": "KF-RAG-016",
+    "query": "本地精排阶段一次最多按 8 条候选组成批次，并且序列长度受哪个配置限制，这两个运行参数分别是什么？",
+    "category": "跨段多跳推理",
+    "difficulty": "hard",
+    "gold_answer": "本地 reranker 的 batch_size 是 8，max_length 是 512。",
+    "gold_keywords": [
+      "batch_size",
+      "8",
+      "max_length",
+      "512"
+    ],
+    "gold_topic": "Reranker 推理参数",
+    "rerank_expected": "问题同时要求批量大小和序列长度两个独立推理配置，reranker 可减少被其他 RAG 数值参数干扰的概率。"
+  },
+  {
+    "id": "KF-RAG-017",
+    "query": "系统召回 20 条以后，是直接全部交给用户，还是最终只保留 5 条？",
+    "category": "容易被干扰项误导的问题",
+    "difficulty": "medium",
+    "gold_answer": "系统先召回 20 个候选进行重排，最终只取 Top-5。",
+    "gold_keywords": [
+      "20",
+      "重排",
+      "Top-5",
+      "5"
+    ],
+    "gold_topic": "候选数量与最终结果数量",
+    "rerank_expected": "20 和 5 都是高频配置数字，单纯向量召回容易混淆 candidate-size 与 top-k，reranker 应识别两者在流程中的不同角色。"
+  },
+  {
+    "id": "KF-RAG-018",
+    "query": "2048 是 reranker 的最大输入长度还是 KnowledgeFlow 的向量维度？",
+    "category": "容易被干扰项误导的问题",
+    "difficulty": "medium",
+    "gold_answer": "2048 是 KnowledgeFlow 的向量维度，reranker 的 max_length 是 512。",
+    "gold_keywords": [
+      "2048",
+      "向量维度",
+      "max_length",
+      "512"
+    ],
+    "gold_topic": "向量维度与模型长度",
+    "rerank_expected": "问题刻意混淆两个数值配置，reranker 需要根据“向量维度”和“最大输入长度”的语义角色区分 2048 与 512。"
+  },
+  {
+    "id": "KF-RAG-019",
+    "query": "KnowledgeFlow 做知识图谱时用的是 Elasticsearch 还是 Neo4j？",
+    "category": "容易被干扰项误导的问题",
+    "difficulty": "easy",
+    "gold_answer": "KnowledgeFlow 的知识图谱使用 Neo4j。",
+    "gold_keywords": [
+      "Neo4j",
+      "知识图谱"
+    ],
+    "gold_topic": "知识图谱存储",
+    "rerank_expected": "Elasticsearch 和 Neo4j 都属于系统组件，词面匹配可能同时召回，reranker 应优先识别与知识图谱语义直接相关的 Neo4j。"
+  },
+  {
+    "id": "KF-RAG-020",
+    "query": "负责 RAG 候选向量召回的是 Redis、Elasticsearch 还是 Qdrant content_chunks？",
+    "category": "容易被干扰项误导的问题",
+    "difficulty": "medium",
+    "gold_answer": "RAG 候选通过 Qdrant 的 content_chunks 进行召回。",
+    "gold_keywords": [
+      "Qdrant",
+      "content_chunks",
+      "召回"
+    ],
+    "gold_topic": "向量召回",
+    "rerank_expected": "多个基础设施名称会造成强关键词干扰，reranker 应根据 RAG 向量召回这一任务语义将 Qdrant content_chunks 排到最前。"
+  },
+  {
+    "id": "KF-RAG-021",
+    "query": "请完整说明 KnowledgeFlow 当前的 RAG 检索设置：从查询进入系统后如何召回和重排，一次召回多少候选，最后保留多少结果，以及最低分数阈值是多少？",
+    "category": "长问题",
+    "difficulty": "hard",
+    "gold_answer": "查询经过 query embedding 后从 Qdrant content_chunks 召回 20 个候选，由 CrossEncoder bge-reranker-v2-m3 重排后取 Top-5，score-threshold 为 0.5。",
+    "gold_keywords": [
+      "query embedding",
+      "Qdrant",
+      "20",
+      "bge-reranker-v2-m3",
+      "Top-5",
+      "0.5"
+    ],
+    "gold_topic": "RAG 完整配置",
+    "rerank_expected": "长 query 同时包含流程和多个参数，向量召回可能分别命中不同片段，reranker 有助于优先选取覆盖问题约束最多的候选。"
+  },
+  {
+    "id": "KF-RAG-022",
+    "query": "如果我只关心本机运行的精排服务，请告诉我它使用什么 reranker 模型、在哪种设备后端上运行、采用什么数值精度，以及 max_length 和 batch_size 当前分别配置成多少？",
+    "category": "长问题",
+    "difficulty": "hard",
+    "gold_answer": "本机精排使用 BAAI/bge-reranker-v2-m3，在 MPS 上以 fp16 运行，max_length=512，batch_size=8。",
+    "gold_keywords": [
+      "bge-reranker-v2-m3",
+      "MPS",
+      "fp16",
+      "512",
+      "8"
+    ],
+    "gold_topic": "本地 Reranker 配置",
+    "rerank_expected": "多个模型运行属性需要同时匹配，reranker 可以降低仅命中模型名或仅命中 MPS 配置的残缺片段排名。"
+  },
+  {
+    "id": "KF-RAG-023",
+    "query": "KnowledgeFlow 对正文做语义分块时，请同时说明断点百分位、最小字符数、最大字符数和缓冲区大小，而不要只告诉我其中一个参数。",
+    "category": "长问题",
+    "difficulty": "hard",
+    "gold_answer": "语义分块参数为 breakpoint-percentile=85、min-chars=80、max-chars=1000、buffer-size=1。",
+    "gold_keywords": [
+      "85",
+      "80",
+      "1000",
+      "1",
+      "breakpoint-percentile",
+      "min-chars",
+      "max-chars",
+      "buffer-size"
+    ],
+    "gold_topic": "语义分块参数",
+    "rerank_expected": "问题明确要求四项参数全部出现，reranker 对完整配置片段的相关性判别优于仅依赖关键词重合。"
+  },
+  {
+    "id": "KF-RAG-024",
+    "query": "除了 RAG 检索本身，这个知识管理平台还用了哪些数据或中间件组件，并且在知识组织、复习和索引处理方面分别提供什么能力？",
+    "category": "长问题",
+    "difficulty": "hard",
+    "gold_answer": "KnowledgeFlow 使用 Elasticsearch、Neo4j、MySQL、Redis 和 RabbitMQ，并支持笔记双向链接、知识图谱、SM-2 间隔重复以及消息异步索引。",
+    "gold_keywords": [
+      "Elasticsearch",
+      "Neo4j",
+      "MySQL",
+      "Redis",
+      "RabbitMQ",
+      "双向链接",
+      "知识图谱",
+      "SM-2",
+      "异步索引"
+    ],
+    "gold_topic": "系统组件与功能",
+    "rerank_expected": "问题横跨基础设施和业务能力，召回结果容易碎片化，reranker 有助于优先排序覆盖多个目标概念的候选。"
+  },
+  {
+    "id": "KF-RAG-025",
+    "query": "KnowledgeFlow 的最终 top-k 不是 5 吗？",
+    "category": "否定问题",
+    "difficulty": "easy",
+    "gold_answer": "是的，KnowledgeFlow 的最终 top-k 是 5。",
+    "gold_keywords": [
+      "top-k",
+      "5"
+    ],
+    "gold_topic": "RAG 检索参数",
+    "rerank_expected": "否定式问法可能降低与直接配置陈述的词面相似度，reranker 可根据语义确认 top-k=5。"
+  },
+  {
+    "id": "KF-RAG-026",
+    "query": "系统的向量维度不是 512，对吧？",
+    "category": "否定问题",
+    "difficulty": "medium",
+    "gold_answer": "对，KnowledgeFlow 的向量维度是 2048，512 是 reranker 的 max_length。",
+    "gold_keywords": [
+      "2048",
+      "向量维度",
+      "512",
+      "max_length"
+    ],
+    "gold_topic": "向量维度与 Reranker 长度",
+    "rerank_expected": "问题故意使用 512 作为错误前提，reranker 需要区分相邻配置中的 512 和真正的向量维度 2048。"
+  },
+  {
+    "id": "KF-RAG-027",
+    "query": "精排服务并不是用 float32 跑的，对吗？",
+    "category": "否定问题",
+    "difficulty": "medium",
+    "gold_answer": "对，本地 reranker 使用 fp16 运行。",
+    "gold_keywords": [
+      "fp16",
+      "reranker"
+    ],
+    "gold_topic": "Reranker 数值精度",
+    "rerank_expected": "query 包含未出现在事实中的 float32 干扰词，reranker 应根据否定语义和精度上下文找到 fp16 配置。"
+  },
+  {
+    "id": "KF-RAG-028",
+    "query": "知识图谱并不是由 MySQL 来承担图存储能力吧？",
+    "category": "否定问题",
+    "difficulty": "medium",
+    "gold_answer": "是的，KnowledgeFlow 的知识图谱使用 Neo4j，而不是 MySQL。",
+    "gold_keywords": [
+      "Neo4j",
+      "知识图谱",
+      "MySQL"
+    ],
+    "gold_topic": "知识图谱存储",
+    "rerank_expected": "MySQL 和 Neo4j 都存在于项目组件列表，否定问法容易召回包含 MySQL 的干扰片段，reranker 应根据知识图谱语义选择 Neo4j。"
+  },
+  {
+    "id": "KF-RAG-029",
+    "query": "那它重排之后留几个？",
+    "category": "追问/指代",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 在 reranker 重排后保留 Top-5。",
+    "gold_keywords": [
+      "重排",
+      "Top-5",
+      "5"
+    ],
+    "gold_topic": "RAG 最终结果数量",
+    "rerank_expected": "query 使用“它”且省略 KnowledgeFlow 和 reranker 的完整上下文，单轮检索语义较弱，reranker 可帮助从召回候选中识别重排结果数量。"
+  },
+  {
+    "id": "KF-RAG-030",
+    "query": "那个本地跑的模型一次处理几条？",
+    "category": "追问/指代",
+    "difficulty": "medium",
+    "gold_answer": "本地 reranker 的 batch_size 是 8。",
+    "gold_keywords": [
+      "reranker",
+      "batch_size",
+      "8"
+    ],
+    "gold_topic": "Reranker 批大小",
+    "rerank_expected": "“那个本地跑的模型”属于弱指代，容易召回其他本地配置，reranker 可根据批处理语义识别 batch_size=8 的片段。"
+  },
+  {
+    "id": "KF-RAG-031",
+    "query": "它的那个 2048 指的是什么？",
+    "category": "追问/指代",
+    "difficulty": "medium",
+    "gold_answer": "2048 指的是 KnowledgeFlow 使用的向量维度。",
+    "gold_keywords": [
+      "2048",
+      "向量维度"
+    ],
+    "gold_topic": "向量配置",
+    "rerank_expected": "query 几乎只有数值和指代词，向量检索可能召回多个数值配置，reranker 对“2048”所属配置语义的判别非常重要。"
+  },
+  {
+    "id": "KF-RAG-032",
+    "query": "前面说的那个复习算法叫什么？",
+    "category": "追问/指代",
+    "difficulty": "medium",
+    "gold_answer": "KnowledgeFlow 使用的间隔重复算法是 SM-2。",
+    "gold_keywords": [
+      "SM-2",
+      "间隔重复"
+    ],
+    "gold_topic": "间隔重复",
+    "rerank_expected": "问题依赖“前面说的那个”这一指代，缺少显式术语，reranker 可以通过“复习算法”的语义找到 SM-2 相关内容。"
+  },
+  {
+    "id": "KF-RAG-033",
+    "query": "KnowledgeFlow 的 MySQL 数据库一共有多少张表？",
+    "category": "无法回答问题",
+    "difficulty": "medium",
+    "gold_answer": "已提供的项目事实没有说明 KnowledgeFlow 的 MySQL 数据表数量，因此无法回答具体有多少张表。",
+    "gold_keywords": [
+      "未说明",
+      "无法回答",
+      "数据表数量"
+    ],
+    "gold_topic": "未提供的数据库细节",
+    "rerank_expected": "项目事实包含 MySQL 名称但没有表数量，reranker 需要避免因为关键词 MySQL 高度匹配而将无关组件描述误当成答案依据。"
+  },
+  {
+    "id": "KF-RAG-034",
+    "query": "RabbitMQ 当前配置了几个消费者线程？",
+    "category": "无法回答问题",
+    "difficulty": "medium",
+    "gold_answer": "已提供的项目事实只说明系统使用 RabbitMQ 并支持消息异步索引，没有提供消费者线程数量。",
+    "gold_keywords": [
+      "RabbitMQ",
+      "异步索引",
+      "未提供",
+      "消费者线程"
+    ],
+    "gold_topic": "未提供的 RabbitMQ 配置",
+    "rerank_expected": "RabbitMQ 本身可以被准确召回，但候选内容不包含线程数，reranker 应避免把仅说明异步索引的片段误判为能够回答具体配置。"
+  },
+  {
+    "id": "KF-RAG-035",
+    "query": "Qdrant content_chunks 当前一共有多少条 point？",
+    "category": "无法回答问题",
+    "difficulty": "medium",
+    "gold_answer": "已提供的测试语料事实没有给出 Qdrant content_chunks 的 point 数量，因此无法回答。",
+    "gold_keywords": [
+      "Qdrant",
+      "content_chunks",
+      "未给出",
+      "point",
+      "无法回答"
+    ],
+    "gold_topic": "未提供的 Qdrant 数据规模",
+    "rerank_expected": "Qdrant content_chunks 与已知 RAG 流程高度相关，容易召回大量相关片段，但 reranker 仍需避免将没有 point 数量的信息误当作直接答案。"
+  },
+  {
+    "id": "KF-RAG-036",
+    "query": "KnowledgeFlow 的 Elasticsearch 索引名称具体叫什么？",
+    "category": "无法回答问题",
+    "difficulty": "medium",
+    "gold_answer": "已提供的项目事实只说明 KnowledgeFlow 使用 Elasticsearch，没有提供具体索引名称。",
+    "gold_keywords": [
+      "Elasticsearch",
+      "未提供",
+      "索引名称"
+    ],
+    "gold_topic": "未提供的 Elasticsearch 配置",
+    "rerank_expected": "关键词 Elasticsearch 可以准确召回组件相关内容，但候选中没有索引名称，reranker 应帮助区分“相关”与“足以回答”的证据。"
+  }
+]
+

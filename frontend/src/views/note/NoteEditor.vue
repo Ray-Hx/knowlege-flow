@@ -28,6 +28,9 @@
                 <n-button @click="showMindmap = true" title="思维导图">
                     🗺️ 思维导图
                 </n-button>
+                <n-button @click="openVersionHistory" title="历史版本">
+                    🕐 历史版本
+                </n-button>
                 <n-button type="primary" @click="saveNote" :loading="saving">
                     保存
                 </n-button>
@@ -39,9 +42,49 @@
                 </div>
             </n-space>
         </div>
-        <div class="editor-wrapper flex-1 overflow-hidden relative mt-2">
+        <div class="editor-wrapper flex-1 overflow-hidden relative mt-2" @click="handleEditorClick">
             <div id="vditor" class="absolute inset-0 border border-gray-100 rounded"></div>
         </div>
+
+        <ArticleViewerModal ref="articleModalRef" />
+
+        <!-- 历史版本抽屉 -->
+        <n-drawer v-model:show="showHistory" width="340" placement="right">
+            <n-drawer-content title="🕐 历史版本" :native-scrollbar="false">
+                <n-spin :show="loadingVersions">
+                    <n-empty v-if="versionList.length === 0" description="暂无历史版本" style="margin-top: 40px;" />
+                    <div v-else class="version-list">
+                        <div
+                            v-for="ver in versionList"
+                            :key="ver.id"
+                            class="version-item"
+                        >
+                            <div class="version-title">{{ ver.title || '（无标题）' }}</div>
+                            <div class="version-time">{{ formatTime(ver.createdTime) }}</div>
+                            <div class="version-actions">
+                                <n-button size="tiny" @click="openVersionPreview(ver)">预览</n-button>
+                                <n-button
+                                    size="tiny"
+                                    type="warning"
+                                    :loading="restoringId === ver.id"
+                                    @click="handleRestoreVersion(ver)"
+                                >
+                                    恢复此版本
+                                </n-button>
+                            </div>
+                        </div>
+                    </div>
+                </n-spin>
+            </n-drawer-content>
+        </n-drawer>
+
+        <!-- 版本内容预览 Modal -->
+        <n-modal v-model:show="showVersionPreview" preset="card" title="历史版本预览" style="width: 700px; max-width: 95vw;">
+            <div v-if="previewVersion">
+                <div style="font-size:13px; color:#999; margin-bottom:8px;">{{ formatTime(previewVersion.createdTime) }}</div>
+                <div class="version-preview-content" v-html="renderMarkdown(previewVersion.contentMd || '')"></div>
+            </div>
+        </n-modal>
 
         <!-- 多源引用内容搜索弹窗 -->
         <n-modal v-model:show="showInsertModal" preset="card" title="选择要引用的内容" style="width: 600px; max-width: 90vw;">
@@ -103,7 +146,7 @@
 
         <!-- 思维导图弹窗 -->
         <n-modal v-model:show="showMindmap" preset="card" title="🗺️ 笔记思维导图" style="width: 90vw; height: 80vh;">
-            <NoteMindmap v-if="showMindmap" :markdown="getCurrentMarkdown()" style="height: 60vh;" />
+            <NoteMindmap v-if="showMindmap" :markdown="getCurrentMarkdown()" :title="noteTitle" style="height: 60vh;" />
         </n-modal>
     </div>
 </template>
@@ -111,11 +154,12 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, NModal, NEmpty, NSpin, NSelect } from 'naive-ui'
+import { useMessage, NModal, NEmpty, NSpin, NSelect, NDrawer, NDrawerContent } from 'naive-ui'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import NoteMindmap from '@/components/NoteMindmap.vue'
-import { noteApi, NoteFolder, Note } from '@/api/note'
+import ArticleViewerModal from '@/components/common/ArticleViewerModal.vue'
+import { noteApi, NoteFolder, Note, NoteVersion } from '@/api/note'
 import { contentApi, ContentItem } from '@/api/content'
 import { getCommunityFeed } from '@/api/community'
 
@@ -130,6 +174,69 @@ const isPublic = ref(false)
 const vditor = ref<Vditor | null>(null)
 const initialContent = ref('')
 
+// 历史版本抽屉
+const showHistory = ref(false)
+const loadingVersions = ref(false)
+const versionList = ref<NoteVersion[]>([])
+const restoringId = ref<number | null>(null)
+const showVersionPreview = ref(false)
+const previewVersion = ref<NoteVersion | null>(null)
+
+const formatTime = (t: string) => {
+    if (!t) return ''
+    const d = new Date(t)
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`
+}
+
+const renderMarkdown = (md: string) => {
+    // 简单 HTML 转义后以 <pre> 形式展示，或可集成 marked 库
+    return md.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+             .replace(/\n/g,'<br/>')
+}
+
+const openVersionHistory = async () => {
+    if (!noteId.value) {
+        message.warning('请先保存笔记再查看历史版本')
+        return
+    }
+    showHistory.value = true
+    loadingVersions.value = true
+    try {
+        versionList.value = await noteApi.getNoteVersions(noteId.value)
+    } catch (e: any) {
+        message.error(e.message || '加载历史版本失败')
+    } finally {
+        loadingVersions.value = false
+    }
+}
+
+const openVersionPreview = async (ver: NoteVersion) => {
+    if (!noteId.value) return
+    try {
+        const detail = await noteApi.getNoteVersionDetail(noteId.value, ver.id)
+        previewVersion.value = detail
+        showVersionPreview.value = true
+    } catch (e: any) {
+        message.error(e.message || '加载版本详情失败')
+    }
+}
+
+const handleRestoreVersion = async (ver: NoteVersion) => {
+    if (!noteId.value) return
+    restoringId.value = ver.id
+    try {
+        await noteApi.restoreVersion(noteId.value, ver.id)
+        message.success(`已恢复到版本: ${formatTime(ver.createdTime)}`)
+        showHistory.value = false
+        // 重新加载笔记内容到编辑器
+        await loadNote()
+    } catch (e: any) {
+        message.error(e.message || '版本恢复失败')
+    } finally {
+        restoringId.value = null
+    }
+}
+
 // 文件夹选择
 const folders = ref<NoteFolder[]>([])
 const selectedFolderId = ref<number>(0)
@@ -143,6 +250,19 @@ const showInsertModal = ref(false)
 const insertTab = ref('article')
 const searchKeyword = ref('')
 const searching = ref(false)
+
+const articleModalRef = ref<any>(null)
+
+const handleEditorClick = (e: MouseEvent) => {
+    const target = (e.target as HTMLElement).closest('.article-ref-badge')
+    if (target) {
+        e.preventDefault()
+        const articleId = target.getAttribute('data-article-id')
+        if (articleId) {
+            articleModalRef.value?.open(Number(articleId))
+        }
+    }
+}
 
 const articleResults = ref<ContentItem[]>([])
 const myNoteResults = ref<Note[]>([])
@@ -196,7 +316,7 @@ const insertFeature = (type: string, item: any) => {
     if (type === 'article') {
         insertStr = `[[!article:${item.id}|${item.title}]]`
     } else if (type === 'my_note') {
-        insertStr = `[${item.title}](/community/note/${item.id})`
+        insertStr = `[[note:${item.id}|${item.title}]]`
     } else if (type === 'community_note') {
         insertStr = `[${item.title}](/community/note/${item.id})`
     }
@@ -289,7 +409,7 @@ const initVditor = () => {
     vditor.value = new Vditor('vditor', {
         height: '100%',
         width: '100%',
-        placeholder: '开始记录你的想法...\n\n💡 提示：\n- 使用 [[笔记标题]] 引用其他笔记\n- 点击上方"插入文章"按钮引用订阅文章',
+        placeholder: '开始记录你的想法...\n\n',
         cache: {
             enable: false,
         },
@@ -342,7 +462,7 @@ const initVditor = () => {
                                 keyword: key
                             })
                             return (res.records || []).map(note => ({
-                                value: `[[${note.title}]]`,
+                                value: `[[note:${note.id}|${note.title}]]`,
                                 html: `<span class="hint-note">📝 ${note.title}</span>`
                             }))
                         } catch (e) {
@@ -358,14 +478,17 @@ const initVditor = () => {
                 path: 'https://cdn.jsdelivr.net/npm/vditor/dist/css/content-theme',
             },
             transform(html: string) {
-                // 渲染 [[!article:id|标题]] 为文章引用徽章
+                // 渲染 [[!article:id|标题]] 为文章引用徽章，并支持站内阅读
                 html = html.replace(/\[\[!article:(\d+)(?:\|([^\]]+))?\]\]/g, (_, id, title) => {
                     const displayTitle = title ? title : `文章引用 #${id}`
-                    // 这里我们为了演示好看只显示 span 徽章，或者如果要跳转可写成 a 标签
-                    // 但通常外部文章链接需要通过 contentLinks 在详情页呈现，这里只改名
-                    return `<span class="article-ref-badge" data-id="${id}">📰 ${displayTitle}</span>`
+                    return `<a class="article-ref-badge" href="javascript:void(0);" data-article-id="${id}" style="text-decoration: none;">📰 ${displayTitle}</a>`
                 })
-                // 渲染 [[笔记标题]] 为笔记跳转链接
+                // 稳定 ID 引用直接跳转；标题只是展示文本，改名不会断链。
+                html = html.replace(/\[\[note:(\d+)(?:\|([^\]]+))?\]\]/gi, (_, id, title) => {
+                    const displayTitle = title || `笔记 #${id}`
+                    return `<a class="note-ref-badge" href="/notes/${id}" target="_blank" style="text-decoration: none;">📝 ${displayTitle}</a>`
+                })
+                // 兼容历史 [[笔记标题]]，保存后由后端回填到关系表。
                 html = html.replace(/\[\[([^\]!][^\]]*)\]\]/g, (_, title) => {
                     return `<a class="note-ref-badge" href="/notes?keyword=${encodeURIComponent(title)}" target="_blank" style="text-decoration: none;">📝 ${title}</a>`
                 })
@@ -535,6 +658,59 @@ onUnmounted(() => {
     -webkit-box-orient: vertical;
     overflow: hidden;
 }
-</style>
 
+/* 历史版本抽屉样式 */
+.version-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 4px 0;
+}
+
+.version-item {
+    padding: 12px;
+    background: #f8f9fb;
+    border: 1px solid #e8e8e8;
+    border-radius: 8px;
+    transition: box-shadow 0.2s;
+}
+
+.version-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border-color: #d0d0d0;
+}
+
+.version-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.version-time {
+    font-size: 11px;
+    color: #999;
+    margin-top: 4px;
+    margin-bottom: 8px;
+}
+
+.version-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.version-preview-content {
+    font-size: 13px;
+    line-height: 1.8;
+    color: #444;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: #f8f9fb;
+    border-radius: 6px;
+    padding: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
 </style>

@@ -3,9 +3,12 @@
 # ============================================
 
 spring:
+  config:
+    # 本地密钥放在被 Git 忽略的 .env；部署环境仍应由平台注入环境变量。
+    import: optional:file:.env[.properties]
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
-  
+
   application:
     name: KnowledgeFlow
 
@@ -16,10 +19,35 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
 
+  # 各环境统一的消费重试策略，避免生产 profile 遗漏后无重试。
+  rabbitmq:
+    listener:
+      simple:
+        acknowledge-mode: auto
+        concurrency: 5
+        max-concurrency: 10
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 500ms
+          multiplier: 2
+          max-interval: 5s
+
+  data:
+    # 项目通过 RedisTemplate 访问 Redis，没有 Redis Repository。
+    redis:
+      repositories:
+        enabled: false
+    # Neo4j Repository 由 TransactionConfig 显式扫描并绑定独立事务管理器。
+    neo4j:
+      repositories:
+        enabled: false
+
   # Jackson配置
   jackson:
     time-zone: GMT+8
-    date-format: yyyy-MM-DD HH:mm:ss
+    date-format: yyyy-MM-dd HH:mm:ss
     serialization:
       write-dates-as-timestamps: false
     default-property-inclusion: non_null
@@ -65,6 +93,11 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
+# JWT 的生命周期是各环境共享配置；签名密钥由各 profile 单独提供。
+jwt:
+  expiration: 604800000 # 7天
+  refresh-expiration: 2592000000 # 30天
+
 ---
 # ============================================
 # 开发环境配置
@@ -76,9 +109,9 @@ spring:
 
   # 数据源配置
   datasource:
-    url: jdbc:mysql://localhost:3306/knowledge_flow?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: kflow
-    password: kflow_password_change_me
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:knowledge_flow}?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:kflow}
+    password: ${MYSQL_PASSWORD:kflow_password}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       minimum-idle: 5
@@ -92,8 +125,8 @@ spring:
   # Redis配置
   data:
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
       database: 0
       timeout: 5000ms
       lettuce:
@@ -101,8 +134,8 @@ spring:
           max-active: 8
           max-idle: 8
           min-idle: 0
-          max-wait: -1ms
-    
+          max-wait: 2s
+
     # Elasticsearch配置
     elasticsearch:
       repositories:
@@ -110,27 +143,18 @@ spring:
 
   # Neo4j配置
   neo4j:
-    uri: bolt://localhost:7687
+    uri: bolt://${NEO4J_HOST:localhost}:${NEO4J_BOLT_PORT:7687}
     authentication:
-      username: neo4j
-      password: neo4j_password_change_me
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:neo4j_password}
 
   # RabbitMQ配置
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: admin
-    password: admin_password_change_me
-    virtual-host: knowledge_flow
-    listener:
-      simple:
-        acknowledge-mode: auto
-        concurrency: 5
-        max-concurrency: 10
-        retry:
-          enabled: true
-          max-attempts: 3
-
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:admin}
+    password: ${RABBITMQ_PASSWORD:admin_password}
+    virtual-host: ${RABBITMQ_VHOST:knowledge_flow}
   # Security OAuth2 (GitHub)
   security:
     oauth2:
@@ -159,8 +183,8 @@ mybatis-plus:
 
 # Elasticsearch配置
 elasticsearch:
-  host: localhost
-  port: 9200
+  host: ${ES_HOST:localhost}
+  port: ${ES_PORT:9200}
   scheme: http
 
 # Qdrant配置
@@ -169,18 +193,19 @@ qdrant:
   port: 6334  # gRPC 端口 (注意：6333 是 REST API 端口，gRPC 需要 6334)
   api-key: ${QDRANT_API_KEY:}
   use-tls: false
+  operation-timeout-ms: ${QDRANT_OPERATION_TIMEOUT_MS:5000}
 
 # MinIO配置
 minio:
-  endpoint: http://localhost:9000
-  access-key: minioadmin
-  secret-key: minioadmin
+  endpoint: http://${MINIO_HOST:localhost}:${MINIO_API_PORT:9000}
+  access-key: ${MINIO_ROOT_USER:minioadmin}
+  secret-key: ${MINIO_ROOT_PASSWORD:minioadmin}
   bucket-name: knowledge-flow
 
 # Redisson配置
 redisson:
   single-server-config:
-    address: redis://localhost:6379
+    address: redis://${REDIS_HOST:localhost}:${REDIS_PORT:6379}
     database: 0
     connection-pool-size: 64
     connection-minimum-idle-size: 10
@@ -191,22 +216,59 @@ redisson:
 langchain4j:
   open-ai:
     base-url: ${OPENAI_BASE_URL:https://api.deepseek.com}
-    api-key: ${OPENAI_API_KEY:}
+    api-key: ${OPENAI_API_KEY:${DEEPSEEK_API_KEY:}}
     model-name: ${OPENAI_MODEL_NAME:deepseek-chat}
     temperature: 0.7
     timeout: 30s
 
-# Zhipu AI 配置
-ZHIPUAI_API_KEY: ca684c9cb0e44777bec1e5136718fa81.xPxn601GXuf2EiK3
-
 # JWT配置
 jwt:
-  secret: ${JWT_SECRET:knowledgeflow-secret-key-change-this-in-production-min-256bits}
-  expiration: 604800000 # 7天
-  refresh-expiration: 2592000000 # 30天
+  # 本地未设置时由 JwtUtils 生成本进程随机密钥，不使用公开固定默认值。
+  secret: ${JWT_SECRET:}
 
 # 应用自定义配置
 app:
+  # RAG 配置
+  rag:
+    chunk:
+      # 语义切片：取相邻句子向量距离的第 N 百分位作为断点阈值，越大切得越少
+      breakpoint-percentile: 85
+      # 切片字符数下限，低于此值与相邻切片合并
+      min-chars: 80
+      # 切片字符数上限，超出强制拆分
+      max-chars: 1000
+      # 求向量时向前后各拼接的句子数，用于抑制单句噪声
+      buffer-size: 1
+    retrieve:
+      # 召回候选数，需明显大于 top-k 才有精排空间
+      candidate-size: 20
+      # 精排后送入生成模型的片段数
+      top-k: 5
+      # 向量相似度下限
+      score-threshold: 0.5
+      # Qdrant 召回超时后降级为无上下文回答，不无限占用请求线程
+      timeout-ms: ${RAG_RETRIEVE_TIMEOUT_MS:5000}
+    rerank:
+      # 重排实现: cross-encoder(专用重排模型) | llm(大模型列表式) | none(对照组)
+      provider: ${RERANK_PROVIDER:cross-encoder}
+      # 重排服务地址。自部署 TEI 为 http://localhost:8080/rerank，
+      # 托管服务填厂商的 /v1/rerank
+      base-url: ${RERANK_BASE_URL:http://localhost:8081/rerank}
+      # 交叉编码器模型。中文场景 bge-reranker-v2-m3 是开源里的最优解
+      model: ${RERANK_MODEL:BAAI/bge-reranker-v2-m3}
+      # 托管服务需要，自部署留空
+      api-key: ${RERANK_API_KEY:}
+      # 本机 MPS 上长文本重排的尾延迟可超过 2 秒；先留出余量，再根据 p95 下调
+      timeout-ms: ${RERANK_TIMEOUT_MS:3500}
+      # 以下仅 provider=llm 时生效
+      enabled: true
+      snippet-chars: 200
+  search:
+    hybrid:
+      # BM25 和向量结果经 RRF 融合后，送入 reranker 的最小候选窗口
+      rerank-candidate-size: ${HYBRID_RERANK_CANDIDATE_SIZE:20}
+      # 任一检索分支超过此时间即降级为空结果，另一分支仍可继续完成搜索
+      timeout-ms: ${HYBRID_SEARCH_TIMEOUT_MS:5000}
   # 同步任务配置
   sync:
     github:
@@ -218,13 +280,13 @@ app:
     rss:
       enabled: true
       cron: '0 0 */6 * * ?' # 每6小时
-  
+
   # 文件存储配置
   storage:
     type: minio # local, minio
     local-path: ./upload
     max-size: 100MB
-  
+
   # AI配置
   ai:
     provider: openai # openai, azure, ollama
@@ -233,6 +295,22 @@ app:
       chunk-size: 512
       chunk-overlap: 50
       top-k: 5
+    # 多轮对话记忆：历史消息回灌给模型，否则追问里的指代无从解析
+    memory:
+      # 回灌的历史消息条数上限（约 5 轮问答），过大会推高 token 成本并稀释当前问题
+      window-size: 10
+      # 单条历史保留的字符数，AI 回答动辄上千字，整窗原样回灌会挤占上下文
+      max-message-chars: 1000
+    # 检索查询改写：追问不自包含时直接 embedding 会召回跑偏，先消解指代
+    query-rewrite:
+      # 关掉则直接用原始问题检索，便于对照改写带来的召回差异
+      enabled: true
+      # 参与改写的历史条数，指代通常只依赖最近一两轮
+      history-size: 4
+      # 改写提示中每条历史保留的字符数，消解指代只需话题线索
+      history-chars: 200
+      # 改写结果字符数上限，超出说明模型没按要求只输出问题，判为不可用
+      max-result-chars: 200
 
 ---
 # ============================================
@@ -316,7 +394,7 @@ elasticsearch:
 
 qdrant:
   host: ${QDRANT_HOST}
-  port: ${QDRANT_PORT:6333}
+  port: ${QDRANT_PORT:6334}
   api-key: ${QDRANT_API_KEY}
   use-tls: true
 
@@ -327,7 +405,7 @@ minio:
 
 langchain4j:
   open-ai:
-    api-key: ${OPENAI_API_KEY:}
+    api-key: ${OPENAI_API_KEY}
     model-name: ${OPENAI_MODEL:gpt-4}
 
 jwt:

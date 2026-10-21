@@ -85,4 +85,12 @@ public class DashboardController {
         Long userId = SecurityUtils.getCurrentUserId();
         return Result.success(dashboardService.getLearningTrend(userId));
     }
+
+    @PostMapping("/tags/sync")
+    @Operation(summary = "同步AI标签")
+    public Result<Void> syncTags() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        dashboardService.syncAiTags(userId);
+        return Result.success();
+    }
 }

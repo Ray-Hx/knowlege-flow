@@ -24,6 +24,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '个人主页' }
     },
     {
+        path: '/community/galaxy',
+        name: 'CommunityGalaxyMap',
+        component: () => import('../views/community/GalaxyView.vue'),
+        meta: { title: '知识星空' }
+    },
+    {
         path: '/',
         component: () => import('../layout/MainLayout.vue'),
         children: [
@@ -58,6 +64,12 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: '知识图谱', requiresAuth: true }
             },
             {
+                path: 'messages',
+                name: 'MessageCenter',
+                component: () => import('../views/message/index.vue'),
+                meta: { title: '消息中心', requiresAuth: true }
+            },
+            {
                 path: 'search',
                 name: 'Search',
                 component: () => import('../views/search/index.vue'),
@@ -67,7 +79,13 @@ const routes: RouteRecordRaw[] = [
                 path: 'content',
                 name: 'Content',
                 component: () => import('../views/content/index.vue'),
-                meta: { title: '内容中心', requiresAuth: true }
+                meta: { title: '订阅源', requiresAuth: true }
+            },
+            {
+                path: 'aggregation',
+                name: 'Aggregation',
+                component: () => import('../views/aggregation/index.vue'),
+                meta: { title: '内容聚合', requiresAuth: true }
             },
             {
                 path: 'ai',
@@ -88,16 +106,16 @@ const routes: RouteRecordRaw[] = [
                 meta: { title: '社区大厅', requiresAuth: true }
             },
             {
-                path: 'community/galaxy',
-                name: 'CommunityGalaxyMap',
-                component: () => import('../views/community/CommunityGraph.vue'),
-                meta: { title: '银河星状图谱', requiresAuth: true }
-            },
-            {
                 path: 'community/note/:id',
                 name: 'PublicNoteDetail',
                 component: () => import('../views/community/PublicNoteDetail.vue'),
                 meta: { title: '笔记详情', requiresAuth: true }
+            },
+            {
+                path: 'profile/settings',
+                name: 'ProfileSettings',
+                component: () => import('../views/profile/ProfileSettings.vue'),
+                meta: { title: '个人设置', requiresAuth: true }
             }
         ]
     }

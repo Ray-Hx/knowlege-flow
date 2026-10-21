@@ -1,13 +1,19 @@
+```vue
 <script setup lang="ts">
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted } from 'vue'
 import { 
-    NLayout, NLayoutContent, NLayoutSider, NCard, NList, NListItem, NThing, NSpace, NTag, NButton, NIcon, NText, NModal, NForm, NFormItem, NInput, NSelect, NInputNumber, useMessage
+    NCard, NList, NListItem, NThing, NSpace, NTag, NButton, NIcon, NText, NModal, NForm, NFormItem, NInput, NSelect, NInputNumber, useMessage
 } from 'naive-ui'
 import { 
-    AddOutline, RefreshOutline, CheckmarkCircleOutline, TrashOutline, LogoRss, LogoGithub, ReaderOutline
+    RefreshOutline, 
+    TrashOutline, 
+    LogoRss, 
+    LogoGithub, 
+    ReaderOutline
 } from '@vicons/ionicons5'
 import { contentApi, ContentSource, ContentItem } from '@/api/content'
 import { useDialog } from 'naive-ui'
+import ArticleViewerModal from '@/components/common/ArticleViewerModal.vue'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -18,7 +24,9 @@ const items = ref<ContentItem[]>([])
 const loading = ref(false)
 const currentSourceId = ref<number | undefined>(undefined)
 const showAddModal = ref(false)
+const articleModalRef = ref<any>(null)
 
+// Methods
 // Form Data
 const newSource = ref<ContentSource>({
     type: 'RSS',
@@ -33,7 +41,7 @@ const fetchSources = async () => {
     try {
         const data = await contentApi.listSources()
         sources.value = data
-    } catch (error) {
+    } catch (error: any) {
         message.error(error.message || '获取订阅源失败')
     }
 }
@@ -44,10 +52,11 @@ const fetchItems = async () => {
         const data = await contentApi.listItems({
             page: 1,
             size: 50,
-            sourceId: currentSourceId.value
+            sourceId: currentSourceId.value,
+            isUpload: false
         })
         items.value = data.records
-    } catch (error) {
+    } catch (error: any) {
         message.error(error.message || '获取内容失败')
     } finally {
         loading.value = false
@@ -60,7 +69,7 @@ const handleAddSource = async () => {
         message.success('添加成功')
         showAddModal.value = false
         fetchSources()
-    } catch (error) {
+    } catch (error: any) {
         message.error(error.message || '添加失败')
     }
 }
@@ -80,7 +89,7 @@ const handleDeleteSource = (id: number) => {
                     currentSourceId.value = undefined
                     fetchItems()
                 }
-            } catch (error) {
+            } catch (error: any) {
                 message.error(error.message || '删除失败')
             }
         }
@@ -112,12 +121,18 @@ const getIcon = (type: string) => {
     }
 }
 
+const openArticle = (id: number, url: string) => {
+    // 优先尝试站内阅读
+    if (articleModalRef.value) {
+        articleModalRef.value.open(id)
+    } else {
+        openUrl(url)
+    }
+}
+
 const openUrl = (url: string) => {
     window.open(url, '_blank')
 }
-
-// Stats
-const totalUnread = ref(0) // Logic to update this could be added
 
 onMounted(() => {
     fetchSources()
@@ -132,9 +147,11 @@ onMounted(() => {
             <n-card class="glass-card flex-1" content-style="padding: 0;">
                 <div class="p-4 flex justify-between items-center border-b border-gray-100">
                     <n-text class="text-lg font-bold">我的订阅</n-text>
-                    <n-button circle size="small" secondary @click="showAddModal = true">
-                        <template #icon><n-icon :component="AddOutline" /></template>
-                    </n-button>
+                    <n-space>
+                        <n-button circle size="small" secondary @click="showAddModal = true">
+                            <template #icon><n-icon :component="LogoRss" /></template>
+                        </n-button>
+                    </n-space>
                 </div>
                 <div class="p-2 space-y-2 overflow-y-auto max-h-[calc(100vh-12rem)]">
                     <div 
@@ -190,7 +207,7 @@ onMounted(() => {
                         <n-list-item v-for="item in items" :key="item.id">
                             <n-thing content-style="margin-top: 10px;">
                                 <template #header>
-                                    <n-text class="font-bold text-lg cursor-pointer hover:text-indigo-600 transition-colors" @click="openUrl(item.url)">
+                                    <n-text class="font-bold text-lg cursor-pointer hover:text-indigo-600 transition-colors" @click="openArticle(item.id, item.url)">
                                         {{ item.title }}
                                     </n-text>
                                 </template>
@@ -243,6 +260,8 @@ onMounted(() => {
                 </template>
             </n-card>
         </n-modal>
+
+        <ArticleViewerModal ref="articleModalRef" />
     </div>
 </template>
 

@@ -3,7 +3,6 @@ package com.ray.knowledgeflow.module.ai.service;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.ray.knowledgeflow.module.ai.dto.ConversationDto;
 import com.ray.knowledgeflow.module.ai.dto.MessageDto;
-import com.ray.knowledgeflow.module.ai.dto.NoteReferenceDto;
 import com.ray.knowledgeflow.module.ai.dto.SendMessageDto;
 
 import java.util.List;
@@ -54,6 +53,17 @@ public interface IAiService {
         MessageDto sendMessage(Long userId, Long conversationId, SendMessageDto dto);
 
         /**
+         * 流式发送消息
+         *
+         * @param userId         用户ID
+         * @param conversationId 对话ID
+         * @param dto            发送消息请求
+         * @return SseEmitter
+         */
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamChat(Long userId, Long conversationId,
+                        SendMessageDto dto);
+
+        /**
          * 获取消息历史
          *
          * @param userId         用户ID
@@ -73,32 +83,35 @@ public interface IAiService {
         /**
          * 提取文本标签
          *
+         * @param title   标题
          * @param content 原始内容
          * @return 标签列表
          */
-        List<String> extractTags(String content);
+        List<String> extractTags(String title, String content);
 
         /**
          * 生成深度解析
          *
+         * @param userId     当前用户ID
          * @param content    原始内容
          * @param targetType 目标类型 (NOTE, CONCEPT, SOURCE)
          * @param targetId   目标ID
          * @return 深度解析结果
          */
-        com.ray.knowledgeflow.module.ai.dto.AiAnalysisResultDto generateDeepAnalysis(String content, String targetType,
-                        Long targetId);
+        com.ray.knowledgeflow.module.ai.dto.AiAnalysisResultDto generateDeepAnalysis(Long userId, String content,
+                        String targetType, Long targetId);
 
         /**
          * 流式生成深度解析
          *
+         * @param userId     当前用户ID
          * @param content    原始内容
          * @param targetType 目标类型 (NOTE, CONCEPT, SOURCE)
          * @param targetId   目标ID
          * @return SseEmitter
          */
-        org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamDeepAnalysis(String content,
-                        String targetType, Long targetId);
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter streamDeepAnalysis(Long userId,
+                        String content, String targetType, Long targetId);
 
         /**
          * 文本润色

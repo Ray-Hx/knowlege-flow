@@ -289,6 +289,10 @@ onMounted(() => {
         </n-button>
       </div>
       
+      <div v-if="searchQuery && notes.length > 0" class="mb-4 text-sm text-gray-500">
+        共找到 <span class="font-bold text-indigo-600">{{ pagination.itemCount }}</span> 个关于 "<span class="italic">{{ searchQuery }}</span>" 的结果
+      </div>
+      
       <n-spin :show="loading">
         <!-- 笔记 List -->
         <div v-if="notes.length > 0" class="flex flex-col gap-4">
@@ -305,25 +309,27 @@ onMounted(() => {
 
             <!-- Content -->
             <div class="flex-1 min-w-0">
-               <div class="flex justify-between items-center mb-1">
-                 <h3 class="font-bold text-gray-800 text-lg group-hover:text-indigo-600 transition-colors truncate">
-                   {{ note.title }}
-                 </h3>
-                 <div class="flex items-center gap-4 text-xs text-gray-400 flex-shrink-0">
-                    <div class="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
-                      <n-icon><FolderOpenOutline /></n-icon>
-                      <span class="max-w-[120px] truncate">{{ note.folderName || '默认文件夹' }}</span>
-                    </div>
-                    <div class="flex items-center gap-1">
-                      <n-icon><TimeOutline /></n-icon>
-                      <span>{{ formatDate(note.updatedTime) }}</span>
-                    </div>
-                 </div>
-               </div>
-               
-               <p class="text-gray-500 text-sm truncate">
-                 {{ note.summary || '暂无摘要...' }}
-               </p>
+                <div class="flex justify-between items-center mb-1">
+                  <h3 
+                    class="font-bold text-gray-800 text-lg group-hover:text-indigo-600 transition-colors truncate"
+                    v-html="note.title"
+                  ></h3>
+                  <div class="flex items-center gap-4 text-xs text-gray-400 flex-shrink-0">
+                     <div class="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-md group-hover:bg-indigo-50 group-hover:text-indigo-500 transition-colors">
+                       <n-icon><FolderOpenOutline /></n-icon>
+                       <span class="max-w-[120px] truncate">{{ note.folderName || '默认文件夹' }}</span>
+                     </div>
+                     <div class="flex items-center gap-1">
+                       <n-icon><TimeOutline /></n-icon>
+                       <span>{{ formatDate(note.updatedTime) }}</span>
+                     </div>
+                  </div>
+                </div>
+                
+                <p 
+                  class="text-gray-500 text-sm truncate"
+                  v-html="note.summary || '暂无摘要...'"
+                ></p>
             </div>
 
             <!-- Actions -->

@@ -46,6 +46,14 @@ export interface NoteDetail extends Note {
     isLiked?: boolean;
 }
 
+export interface NoteVersion {
+    id: number;
+    noteId: number;
+    title: string;
+    contentMd?: string;
+    createdTime: string;
+}
+
 export const noteApi = {
     // 获取文件夹树
     getFolders() {
@@ -85,5 +93,20 @@ export const noteApi = {
     // 同步所有笔记到知识库（RAG 向量索引）
     rebuildIndex() {
         return request.post<any, number>('/notes/rebuild-index')
+    },
+
+    // 获取笔记历史版本列表
+    getNoteVersions(id: number) {
+        return request.get<any, NoteVersion[]>(`/notes/${id}/versions`)
+    },
+
+    // 获取指定笔记历史版本详情
+    getNoteVersionDetail(id: number, versionId: number) {
+        return request.get<any, NoteVersion>(`/notes/${id}/versions/${versionId}`)
+    },
+
+    // 恢复到指定历史版本（版本回溯 / 时光机）
+    restoreVersion(noteId: number, versionId: number) {
+        return request.post<any, void>(`/notes/${noteId}/versions/${versionId}/restore`)
     }
 }

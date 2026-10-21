@@ -1,7 +1,12 @@
 package com.ray.knowledgeflow.module.graph.entity;
 
-import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIdentityInfo;
+import com.fasterxml.jackson.annotation.ObjectIdGenerators;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import org.springframework.data.neo4j.core.schema.Id;
 import org.springframework.data.neo4j.core.schema.Node;
 import org.springframework.data.neo4j.core.schema.Relationship;
@@ -15,12 +20,17 @@ import java.util.Set;
  * @author Ray
  * @since 2024-01-16
  */
-@Data
+@Getter
+@Setter
+@ToString
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@JsonIdentityInfo(generator = ObjectIdGenerators.PropertyGenerator.class, property = "id")
 @Node("SimpleNote")
 @NoArgsConstructor
 public class NoteNode {
 
     @Id
+    @EqualsAndHashCode.Include
     private Long id; // 对应 MySQL 中的 note_id，不使用 @GeneratedValue
 
     private String title;
@@ -28,9 +38,11 @@ public class NoteNode {
     private Long userId;
 
     @Relationship(type = "LINKS_TO", direction = Relationship.Direction.OUTGOING)
+    @ToString.Exclude
     private Set<NoteNode> links = new HashSet<>();
 
     @Relationship(type = "RELATED", direction = Relationship.Direction.OUTGOING)
+    @ToString.Exclude
     private Set<RelatedRelation> related = new HashSet<>();
 
     public NoteNode(Long id, String title, Long userId) {
@@ -51,6 +63,16 @@ public class NoteNode {
             related = new HashSet<>();
         }
         related.add(new RelatedRelation(note, label));
+    }
+
+    /**
+     * 添加已存在的关联关系（保留 ID）
+     */
+    public void addRelated(RelatedRelation relation) {
+        if (related == null) {
+            related = new HashSet<>();
+        }
+        related.add(relation);
     }
 
     /**

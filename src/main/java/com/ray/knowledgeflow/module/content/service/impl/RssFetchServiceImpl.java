@@ -6,6 +6,7 @@ import com.ray.knowledgeflow.module.content.entity.ContentSource;
 import com.ray.knowledgeflow.module.content.mapper.ContentItemMapper;
 import com.ray.knowledgeflow.module.content.mapper.ContentSourceMapper;
 import com.ray.knowledgeflow.module.content.service.IRssFetchService;
+import com.ray.knowledgeflow.common.utils.OutboundUrlValidator;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndFeed;
 import com.rometools.rome.io.SyndFeedInput;
@@ -13,11 +14,16 @@ import com.rometools.rome.io.XmlReader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
+import org.jsoup.safety.Safelist;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.net.URL;
+import java.net.URI;
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -33,6 +39,9 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class RssFetchServiceImpl implements IRssFetchService {
+
+    private static final int MAX_FEED_BYTES = 5 * 1024 * 1024;
+    private static final int MAX_ENTRIES_PER_FETCH = 200;
 
     private final ContentItemMapper contentItemMapper;
     private final ContentSourceMapper contentSourceMapper; // Added
@@ -52,13 +61,18 @@ public class RssFetchServiceImpl implements IRssFetchService {
 
     @Override
     public void fetchFromSource(Long sourceId, Long userId) {
-        // 查询内容源并调用 fetchAsync
-        ContentSource source = contentSourceMapper.selectById(sourceId);
-        if (source != null && source.getUserId().equals(userId)) {
-            fetchAsync(source);
-        } else {
-            log.warn("RSS内容源不存在或无权访问: sourceId={}, userId={}", sourceId, userId);
+        ContentSource source = findOwnedSource(sourceId, userId, "RSS");
+        fetch(source);
+    }
+
+    private ContentSource findOwnedSource(Long sourceId, Long userId, String expectedType) {
+        ContentSource source = contentSourceMapper.selectOne(new LambdaQueryWrapper<ContentSource>()
+                .eq(ContentSource::getId, sourceId)
+                .eq(ContentSource::getUserId, userId));
+        if (source == null || source.getType() == null || !expectedType.equalsIgnoreCase(source.getType())) {
+            throw new IllegalArgumentException("内容源不存在、无权访问或类型不匹配");
         }
+        return source;
     }
 
     @Override
@@ -69,24 +83,31 @@ public class RssFetchServiceImpl implements IRssFetchService {
 
         try {
             // 手动处理重定向 (包括 HTTP→HTTPS)
-            java.io.InputStream stream = openConnectionWithRedirect(source.getUrl());
-
-            SyndFeedInput input = new SyndFeedInput();
-            SyndFeed feed;
-            try {
-                feed = input.build(new XmlReader(stream));
-            } finally {
-                stream.close();
+            byte[] feedBytes;
+            try (java.io.InputStream stream = openConnectionWithRedirect(source.getUrl())) {
+                feedBytes = stream.readNBytes(MAX_FEED_BYTES + 1);
+            }
+            if (feedBytes.length > MAX_FEED_BYTES) {
+                throw new java.io.IOException("RSS 响应超过 5MB 限制");
             }
 
-            List<SyndEntry> entries = feed.getEntries();
-            log.info("RSS源解析成功: name={}, 共{}条目", source.getName(), entries.size());
+            SyndFeedInput input = new SyndFeedInput();
+            SyndFeed feed = input.build(new XmlReader(new ByteArrayInputStream(feedBytes)));
+
+            List<SyndEntry> entries = feed.getEntries().stream().limit(MAX_ENTRIES_PER_FETCH).toList();
+            log.info("RSS源解析成功: name={}, 本次处理{}条", source.getName(), entries.size());
 
             for (SyndEntry entry : entries) {
                 // 检查是否已存在
                 String link = entry.getLink();
                 if (link == null || link.isBlank()) {
                     log.warn("RSS条目没有链接，跳过: title={}", entry.getTitle());
+                    continue;
+                }
+                try {
+                    link = OutboundUrlValidator.requirePublicHttpUrl(link).toString();
+                } catch (IllegalArgumentException e) {
+                    log.warn("RSS条目 URL 不安全，跳过: title={}, reason={}", entry.getTitle(), e.getMessage());
                     continue;
                 }
 
@@ -111,14 +132,70 @@ public class RssFetchServiceImpl implements IRssFetchService {
                 // 提取摘要 (去除 HTML 标签)
                 if (entry.getDescription() != null) {
                     String desc = entry.getDescription().getValue();
-                    String plainText = Jsoup.parse(desc).text();
+                    String plainText = sanitizePlainText(Jsoup.parse(desc).text());
                     item.setSummary(plainText.length() > 500 ? plainText.substring(0, 500) + "..." : plainText);
                 }
 
                 // 提取全文内容
+                boolean hasFullText = false;
                 if (entry.getContents() != null && !entry.getContents().isEmpty()) {
                     String content = entry.getContents().get(0).getValue();
-                    item.setContentText(Jsoup.parse(content).text());
+                    String cleanContent = sanitizePlainText(Jsoup.parse(content).text());
+                    // 如果内容足够长，认为是有效正文
+                    if (cleanContent.length() > 200) {
+                        item.setContentText(cleanContent);
+                        hasFullText = true;
+                    } else if (item.getSummary() == null && cleanContent.length() > 0) {
+                        item.setSummary(cleanContent);
+                    }
+                }
+
+                // 如果 RSS 本身没给全文，或者全文太短了，我们主动去网页抓
+                if (!hasFullText && link.startsWith("http")) {
+                    try {
+                        log.info("RSS条目缺正文，尝试智能抓取原网页: {}", link);
+                        Document doc = fetchPublicDocument(link);
+
+                        // 常见正文容器选择器
+                        String[] selectors = {
+                                "article", ".post-content", ".entry-content", ".article-content",
+                                "#content", ".markdown-body", ".rich_media_content"
+                        };
+
+                        Element mainContent = null;
+                        for (String selector : selectors) {
+                            mainContent = doc.selectFirst(selector);
+                            if (mainContent != null && mainContent.text().length() > 200) {
+                                break;
+                            }
+                        }
+
+                        if (mainContent != null) {
+                            // 保留 HTML 格式的内部，但如果是专门存 text 可以直接用 html()
+                            // 为了配合阅读器更好的沉浸格式，建议存 html
+                            item.setContentText(sanitizeArticleHtml(mainContent.html(), link));
+                            log.info("原网页正文抓取成功, 长度: {}", item.getContentText().length());
+                        } else {
+                            // 退化方案：直接取 body 文本，或者如果没有就置空
+                            String bodyText = doc.body().text();
+                            if (bodyText != null && bodyText.length() > 200) {
+                                item.setContentText(sanitizePlainText(bodyText));
+                                log.info("退化抓取 body text 成功");
+                            } else {
+                                // 连 body 都没有有效的正文，就用 summary 顶替吧
+                                item.setContentText(item.getSummary() != null ? item.getSummary() : "该文章无法提取正文内容。");
+                            }
+                        }
+
+                    } catch (Exception e) {
+                        log.warn("智能抓取原网页正文失败: url={}, error={}", link, e.getMessage());
+                        item.setContentText(item.getSummary() != null ? item.getSummary() : "由于原网页限制，无法提取正文内容。");
+                    }
+                } else if (hasFullText && item.getContentText() != null) {
+                    // 如果 RSS 自带正文，为兼容内置阅读器，最好保持 HTML
+                    // 原先是 Jsoup.parse(content).text()，我们改为获取原始 HTML片段
+                    String content = entry.getContents().get(0).getValue();
+                    item.setContentText(sanitizeArticleHtml(content, link));
                 }
 
                 contentItemMapper.insert(item);
@@ -151,10 +228,20 @@ public class RssFetchServiceImpl implements IRssFetchService {
      */
     private java.io.InputStream openConnectionWithRedirect(String urlString) throws java.io.IOException {
         int maxRedirects = 5;
-        String currentUrl = urlString;
+        URI currentUri;
+        try {
+            currentUri = OutboundUrlValidator.requirePublicHttpUrl(urlString);
+        } catch (IllegalArgumentException e) {
+            throw new java.io.IOException(e.getMessage(), e);
+        }
 
         for (int i = 0; i < maxRedirects; i++) {
-            URL url = new URL(currentUrl);
+            try {
+                currentUri = OutboundUrlValidator.requirePublicHttpUrl(currentUri.toString());
+            } catch (IllegalArgumentException e) {
+                throw new java.io.IOException(e.getMessage(), e);
+            }
+            URL url = currentUri.toURL();
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection(java.net.Proxy.NO_PROXY);
 
             conn.setRequestProperty("User-Agent",
@@ -165,7 +252,7 @@ public class RssFetchServiceImpl implements IRssFetchService {
             conn.setInstanceFollowRedirects(false); // 手动处理重定向
 
             int responseCode = conn.getResponseCode();
-            log.info("RSS连接响应: url={}, responseCode={}", currentUrl, responseCode);
+            log.info("RSS连接响应: host={}, responseCode={}", currentUri.getHost(), responseCode);
 
             if (responseCode == java.net.HttpURLConnection.HTTP_OK) {
                 return conn.getInputStream();
@@ -173,13 +260,13 @@ public class RssFetchServiceImpl implements IRssFetchService {
 
             if (responseCode == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
                     responseCode == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
+                    responseCode == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
                     responseCode == 307 || responseCode == 308) {
                 String location = conn.getHeaderField("Location");
                 if (location == null || location.isEmpty()) {
                     throw new java.io.IOException("重定向但没有Location头: " + responseCode);
                 }
-                log.info("RSS重定向: {} -> {}", currentUrl, location);
-                currentUrl = location;
+                currentUri = currentUri.resolve(location);
                 conn.disconnect();
                 continue;
             }
@@ -188,6 +275,62 @@ public class RssFetchServiceImpl implements IRssFetchService {
         }
 
         throw new java.io.IOException("重定向次数超过限制: " + maxRedirects);
+    }
+
+    /** 抓取 RSS 条目正文，并对每一次重定向重新执行出站地址校验。 */
+    private Document fetchPublicDocument(String urlString) throws java.io.IOException {
+        URI currentUri;
+        try {
+            currentUri = OutboundUrlValidator.requirePublicHttpUrl(urlString);
+        } catch (IllegalArgumentException e) {
+            throw new java.io.IOException(e.getMessage(), e);
+        }
+
+        for (int i = 0; i < 5; i++) {
+            try {
+                currentUri = OutboundUrlValidator.requirePublicHttpUrl(currentUri.toString());
+            } catch (IllegalArgumentException e) {
+                throw new java.io.IOException(e.getMessage(), e);
+            }
+
+            org.jsoup.Connection.Response response = Jsoup.connect(currentUri.toString())
+                    .userAgent("KnowledgeFlow/1.0")
+                    .timeout(5000)
+                    .maxBodySize(2 * 1024 * 1024)
+                    .followRedirects(false)
+                    .ignoreHttpErrors(true)
+                    .execute();
+
+            int status = response.statusCode();
+            if (status >= 200 && status < 300) {
+                return response.parse();
+            }
+            if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+                String location = response.header("Location");
+                if (location == null || location.isBlank()) {
+                    throw new java.io.IOException("网页重定向缺少 Location");
+                }
+                currentUri = currentUri.resolve(location);
+                continue;
+            }
+            throw new java.io.IOException("网页服务器返回错误: HTTP " + status);
+        }
+        throw new java.io.IOException("网页重定向次数超过限制");
+    }
+
+    private String sanitizeArticleHtml(String html, String baseUri) {
+        Safelist safelist = Safelist.relaxed()
+                .addTags("article", "section", "figure", "figcaption")
+                .addAttributes("a", "target")
+                .addProtocols("a", "href", "http", "https");
+        String clean = Jsoup.clean(html, baseUri, safelist);
+        Document fragment = Jsoup.parseBodyFragment(clean, baseUri);
+        fragment.select("a").attr("rel", "noopener noreferrer nofollow");
+        return fragment.body().html();
+    }
+
+    private String sanitizePlainText(String text) {
+        return text == null ? null : Jsoup.clean(text, Safelist.none());
     }
 
     private LocalDateTime toLocalDateTime(Date date) {

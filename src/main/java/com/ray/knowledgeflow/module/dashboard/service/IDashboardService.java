@@ -46,4 +46,9 @@ public interface IDashboardService {
      * 获取近12周每周笔记数（学习趋势折线图）
      */
     List<DailyStudyDto> getLearningTrend(Long userId);
+
+    /**
+     * 同步尚未打标签的笔记，通过AI提取标签
+     */
+    void syncAiTags(Long userId);
 }

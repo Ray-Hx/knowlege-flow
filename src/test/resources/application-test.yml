@@ -34,3 +34,6 @@ knowledge-flow:
   ai:
     zhipuai:
       api-key: dummy
+
+jwt:
+  secret: knowledgeflow-test-secret-only-for-tests-32bytes

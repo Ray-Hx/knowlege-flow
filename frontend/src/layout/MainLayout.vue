@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { h, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NMenu, NIcon, NDropdown, NAvatar, NSpace, NText } from 'naive-ui'
+import { NLayout, NLayoutSider, NLayoutHeader, NLayoutContent, NMenu, NIcon, NAvatar, NText, NBadge } from 'naive-ui'
 import type { MenuOption } from 'naive-ui'
 import { 
   HomeOutline, 
@@ -11,12 +11,14 @@ import {
   CalendarOutline,
   ChatbubbleEllipsesOutline,
   LogOutOutline,
-  PersonOutline,
   NotificationsOutline,
   ReaderOutline,
-  PlanetOutline
+  ChatboxOutline,
+  PlanetOutline,
+  LayersOutline
 } from '@vicons/ionicons5'
 import { useUserStore } from '@/store/user'
+import { onMounted } from 'vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -26,6 +28,14 @@ const collapsed = ref(false)
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
+}
+
+function renderBadgeIcon(icon: any, countGetter: () => number) {
+  return () => h(
+    NBadge, 
+    { value: countGetter(), max: 99, dot: false, showZero: false }, 
+    { default: () => h(NIcon, null, { default: () => h(icon) }) }
+  )
 }
 
 const menuOptions: MenuOption[] = [
@@ -50,13 +60,23 @@ const menuOptions: MenuOption[] = [
     icon: renderIcon(ShareSocialOutline)
   },
   {
+    label: () => h(RouterLink, { to: '/messages' }, { default: () => '消息中心' }),
+    key: 'messages',
+    icon: renderBadgeIcon(ChatboxOutline, () => userStore.unreadMessageCount)
+  },
+  {
     label: () => h(RouterLink, { to: '/search' }, { default: () => '全文搜索' }),
     key: 'search',
     icon: renderIcon(SearchOutline)
   },
   {
-    label: () => h(RouterLink, { to: '/content' }, { default: () => '内容订阅' }),
+    label: () => h(RouterLink, { to: '/content' }, { default: () => '订阅源' }),
     key: 'content',
+    icon: renderIcon(LayersOutline)
+  },
+  {
+    label: () => h(RouterLink, { to: '/aggregation' }, { default: () => '内容聚合' }),
+    key: 'aggregation',
     icon: renderIcon(ReaderOutline)
   },
   {
@@ -68,19 +88,6 @@ const menuOptions: MenuOption[] = [
     label: () => h(RouterLink, { to: '/review' }, { default: () => '间隔复习' }),
     key: 'review',
     icon: renderIcon(CalendarOutline)
-  }
-]
-
-const userOptions = [
-  {
-    label: '个人资料',
-    key: 'profile',
-    icon: renderIcon(PersonOutline)
-  },
-  {
-    label: '退出登录',
-    key: 'logout',
-    icon: renderIcon(LogOutOutline)
   }
 ]
 
@@ -101,10 +108,22 @@ watchEffect(() => {
   else if (path.includes('/notes')) activeKey.value = 'notes'
   else if (path.includes('/community')) activeKey.value = 'community'
   else if (path.includes('/graph')) activeKey.value = 'graph'
+  else if (path.includes('/messages')) activeKey.value = 'messages'
   else if (path.includes('/search')) activeKey.value = 'search'
   else if (path.includes('/content')) activeKey.value = 'content'
+  else if (path.includes('/aggregation')) activeKey.value = 'aggregation'
   else if (path.includes('/ai')) activeKey.value = 'ai'
   else if (path.includes('/review')) activeKey.value = 'review'
+})
+
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    userStore.fetchUnreadMessageCount()
+    // 简单的轮询，每10秒刷一次
+    setInterval(() => {
+      userStore.fetchUnreadMessageCount()
+    }, 10000)
+  }
 })
 
 </script>
@@ -125,14 +144,14 @@ watchEffect(() => {
     >
       <div class="h-24 flex items-center justify-center">
         <div 
-          class="flex items-center justify-center bg-gradient-to-tr from-indigo-500 to-purple-500 text-white rounded-2xl shadow-lg transition-all duration-500"
+          class="flex items-center justify-center bg-gray-900 text-white rounded-2xl shadow-lg transition-all duration-500"
           :class="collapsed ? 'w-10 h-10' : 'w-12 h-12'"
         >
           <n-icon size="24" :component="BookOutline" />
         </div>
         <n-text 
           v-if="!collapsed" 
-          class="ml-3 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600"
+          class="ml-3 text-xl font-bold text-gray-900"
         >
           Knowledge
         </n-text>
@@ -149,13 +168,16 @@ watchEffect(() => {
       />
 
       <div class="p-4 mb-2">
-        <div class="glass-card p-3 flex items-center gap-3 cursor-pointer hover:bg-white/50 transition-colors">
+        <div 
+          class="glass-card p-3 flex items-center gap-3 cursor-pointer hover:bg-white/50 transition-colors"
+          @click="router.push('/profile/settings')"
+        >
           <n-avatar round size="small" :src="userStore.userInfo.avatar || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'" />
           <div v-if="!collapsed" class="flex flex-col overflow-hidden">
             <span class="text-sm font-bold text-gray-700 truncate">{{ userStore.userInfo.username || '用户' }}</span>
             <span class="text-xs text-gray-500 truncate">{{ (userStore.userInfo.roles && userStore.userInfo.roles.length > 0) ? userStore.userInfo.roles.join(', ') : '普通用户' }}</span>
           </div>
-          <n-icon v-if="!collapsed" :component="LogOutOutline" class="ml-auto text-gray-400 hover:text-red-500" @click="handleUserSelect('logout')" />
+          <n-icon v-if="!collapsed" :component="LogOutOutline" class="ml-auto text-gray-400 hover:text-red-500" @click.stop="handleUserSelect('logout')" />
         </div>
       </div>
     </n-layout-sider>
@@ -165,14 +187,14 @@ watchEffect(() => {
         <div class="header-left flex items-center gap-4">
           <n-text class="text-lg font-medium text-gray-700">{{ route.meta.title }}</n-text>
         </div>
-        <div class="header-right flex items-center gap-4">
-          <n-button circle secondary class="glass-button">
-            <template #icon><n-icon :component="SearchOutline" /></template>
-          </n-button>
-          <n-button circle secondary class="glass-button">
-            <template #icon><n-icon :component="NotificationsOutline" /></template>
-          </n-button>
-        </div>
+<!--        <div class="header-right flex items-center gap-4">-->
+<!--          <n-button circle secondary class="glass-button">-->
+<!--            <template #icon><n-icon :component="SearchOutline" /></template>-->
+<!--          </n-button>-->
+<!--          <n-button circle secondary class="glass-button">-->
+<!--            <template #icon><n-icon :component="NotificationsOutline" /></template>-->
+<!--          </n-button>-->
+<!--        </div>-->
       </n-layout-header>
       
       <n-layout-content class="glass-panel rounded-3xl p-6 h-[calc(100vh-8rem)] overflow-hidden">
@@ -188,9 +210,9 @@ watchEffect(() => {
 
 <style scoped>
 :deep(.n-layout-sider) {
-  background: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 :deep(.n-menu .n-menu-item-content) {
@@ -204,20 +226,20 @@ watchEffect(() => {
 }
 
 :deep(.n-menu .n-menu-item-content:hover::before) {
-  background-color: rgba(255, 255, 255, 0.5) !important;
+  background-color: rgba(0, 0, 0, 0.03) !important;
 }
 
 :deep(.n-menu .n-menu-item-content.n-menu-item-content--selected::before) {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%) !important;
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(0, 0, 0, 0.85) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 :deep(.n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content__icon) {
-  color: #6366f1 !important;
+  color: #fff !important;
 }
 
 :deep(.n-menu .n-menu-item-content.n-menu-item-content--selected .n-menu-item-content__label) {
-  color: #4f46e5 !important;
+  color: #fff !important;
   font-weight: 600;
 }
 

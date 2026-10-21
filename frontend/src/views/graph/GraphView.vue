@@ -8,7 +8,7 @@ import { aiApi } from '@/api/ai'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
 import { NButton, NSpin, NIcon, NTag, NCollapseTransition, useMessage } from 'naive-ui'
-import { RefreshOutline, ExpandOutline, SparklesOutline, CloseOutline, ArrowForward, ArrowBack } from '@vicons/ionicons5'
+import { RefreshOutline, ExpandOutline, SparklesOutline, CloseOutline, ArrowForward, ArrowBack, SyncOutline } from '@vicons/ionicons5'
 
 import { useUserStore } from '@/store/user'
 
@@ -30,7 +30,7 @@ const previewRef = ref<HTMLDivElement | null>(null)
 const analyzing = ref(false)
 const analysisResult = ref('')
 const analysisTime = ref('')
-const showIsolatedNodes = ref(false) // 默认隐藏孤立节点
+const showIsolatedNodes = ref(true) // 默认显示孤立节点，确保用户能看到所有笔记
 
 // Type Styling
 const TYPE_COLORS: Record<string, string> = {
@@ -65,6 +65,7 @@ let g: d3.Selection<SVGGElement, unknown, null, undefined> | null = null
 
 // AI Action State
 const aiAnalyzing = ref(false)
+const rebuildingGraph = ref(false)
 const analysisProgress = ref({ current: 0, total: 0, message: '' })
 
 // Data - will be populated in onMounted
@@ -400,6 +401,19 @@ function navigateToNote(id: string | number) {
     router.push(`/notes/${id}`)
 }
 
+const rebuildExplicitGraph = async () => {
+    rebuildingGraph.value = true
+    try {
+        const count = await graphApi.rebuildGraph()
+        message.success(`已从 ${count} 篇笔记重建双向链接`)
+        window.location.reload()
+    } catch (error: any) {
+        message.error(error.message || '双向链接重建失败')
+    } finally {
+        rebuildingGraph.value = false
+    }
+}
+
 onMounted(async () => {
   loading.value = true
   // Try to load data from API first, fall back to mock data
@@ -410,13 +424,16 @@ onMounted(async () => {
     // 后端返回的是 List<NoteNode>，每个节点的 links 属性包含关联的节点
     // 需要转换为前端需要的 { nodes, links } 扁平格式
     if (Array.isArray(data) && data.length > 0) {
-      // 转换节点
+      // 转换节点和连线
       const nodeMap = new Map()
+      const relationMap = new Map() // 用于按关系 ID 去重
       const processedNodes: any[] = []
-      const processedLinks: any[] = []
       
-      // 第一遍：收集所有节点
-      data.forEach((node: any) => {
+      // 深度优先或递归遍历解析所有嵌套节点和关系
+      const traverse = (node: any) => {
+        if (!node || !node.id) return
+        
+        // 1. 处理节点
         if (!nodeMap.has(node.id)) {
           processedNodes.push({
             id: node.id,
@@ -427,62 +444,50 @@ onMounted(async () => {
           nodeMap.set(node.id, true)
         }
         
-        // 处理嵌套的 links（关联节点）
+        // 2. 处理 links (NoteNode 集合)
         if (node.links && Array.isArray(node.links)) {
           node.links.forEach((linkedNode: any) => {
-            // 添加关联节点到节点列表
-            if (!nodeMap.has(linkedNode.id)) {
-              processedNodes.push({
-                id: linkedNode.id,
-                name: linkedNode.title || '无标题',
-                label: linkedNode.title || '无标题',
-                type: 'Note'
-              })
-              nodeMap.set(linkedNode.id, true)
+            const targetId = typeof linkedNode === 'object' ? linkedNode.id : linkedNode
+            if (targetId) {
+              const linkKey = `link-${node.id}-${targetId}`
+              if (!relationMap.has(linkKey)) {
+                relationMap.set(linkKey, {
+                  source: node.id,
+                  target: targetId,
+                  type: 'LINKS_TO'
+                })
+              }
+              if (typeof linkedNode === 'object') traverse(linkedNode)
             }
-            // 添加边
-            processedLinks.push({
-              source: node.id,
-              target: linkedNode.id,
-              type: 'LINKS_TO'
-            })
           })
         }
         
-        // 处理嵌套的 related（AI 关联）
+        // 3. 处理 related (RelatedRelation 集合)
         if (node.related && Array.isArray(node.related)) {
-          node.related.forEach((relation: any) => {
-            // 新格式: {target: {id, title}, label} 或者直接 {id, title}
-            const linkedNode = relation.target || relation
-            const label = relation.label || ''
+          node.related.forEach((rel: any) => {
+            const targetNode = rel.target
+            const targetId = typeof targetNode === 'object' ? targetNode.id : targetNode
             
-            // 添加关联节点到节点列表
-            if (linkedNode && linkedNode.id && !nodeMap.has(linkedNode.id)) {
-              processedNodes.push({
-                id: linkedNode.id,
-                name: linkedNode.title || '无标题',
-                label: linkedNode.title || '无标题',
-                type: 'Note',
-                group: 2
-              })
-              nodeMap.set(linkedNode.id, true)
-            }
-            // 添加边（带标签）
-            if (linkedNode && linkedNode.id) {
-              processedLinks.push({
-                source: node.id,
-                target: linkedNode.id,
-                type: 'RELATED',
-                label: label
-              })
+            if (targetId && rel.id) { // 必须有关系 ID 以便去重
+              if (!relationMap.has(rel.id)) {
+                relationMap.set(rel.id, {
+                  source: node.id,
+                  target: targetId,
+                  type: 'RELATED',
+                  label: rel.label || '相关'
+                })
+              }
+              if (typeof targetNode === 'object') traverse(targetNode)
             }
           })
         }
-      })
+      }
+
+      data.forEach((item: any) => traverse(item))
       
       nodes.value = processedNodes
-      links.value = processedLinks
-      console.log('Processed graph data:', { nodes: processedNodes.length, links: processedLinks.length })
+      links.value = Array.from(relationMap.values())
+      console.log('Processed graph data:', { nodes: processedNodes.length, links: links.value.length })
     } else if (data && (data.nodes || data.links)) {
       // 如果后端返回的已经是 { nodes, links } 格式
       nodes.value = data.nodes || []
@@ -598,70 +603,44 @@ const analyzeRelations = async () => {
                                 
                                 // 主动退出循环，确保 finally 执行
                                 // 但先重新加载数据
-                                const graphData = await graphApi.getGraph()
-                                if (Array.isArray(graphData)) {
-                                     const nodeMap = new Map()
-                                     const processedNodes: any[] = []
-                                     const processedLinks: any[] = []
-                                     graphData.forEach((node: any) => {
+                                 const graphData = await graphApi.getGraph()
+                                 if (Array.isArray(graphData)) {
+                                      const nodeMap = new Map()
+                                      const rMap = new Map()
+                                      const pNodes: any[] = []
+                                      
+                                      const t = (node: any) => {
+                                        if (!node || !node.id) return
                                         if (!nodeMap.has(node.id)) {
-                                          processedNodes.push({
-                                            id: node.id,
-                                            name: node.title || '无标题',
-                                            label: node.title || '无标题',
-                                            type: 'Note'
-                                          })
+                                          pNodes.push({ id: node.id, name: node.title || '无标题', label: node.title || '无标题', type: 'Note' })
                                           nodeMap.set(node.id, true)
                                         }
                                         if (node.links && Array.isArray(node.links)) {
-                                          node.links.forEach((linkedNode: any) => {
-                                            if (!nodeMap.has(linkedNode.id)) {
-                                              processedNodes.push({
-                                                id: linkedNode.id,
-                                                name: linkedNode.title || '无标题',
-                                                label: linkedNode.title || '无标题',
-                                                type: 'Note'
-                                              })
-                                              nodeMap.set(linkedNode.id, true)
+                                          node.links.forEach((ln: any) => {
+                                            const tid = typeof ln === 'object' ? ln.id : ln
+                                            if (tid) {
+                                              const key = `link-${node.id}-${tid}`
+                                              if (!rMap.has(key)) rMap.set(key, { source: node.id, target: tid, type: 'LINKS_TO' })
+                                              if (typeof ln === 'object') t(ln)
                                             }
-                                            processedLinks.push({
-                                              source: node.id,
-                                              target: linkedNode.id,
-                                              type: 'LINKS_TO'
-                                            })
                                           })
                                         }
-                                        // 处理嵌套的 related（AI 关联）
                                         if (node.related && Array.isArray(node.related)) {
-                                            node.related.forEach((relation: any) => {
-                                                // 新格式: {target: {id, title}, label}
-                                                const linkedNode = relation.target || relation
-                                                const label = relation.label || ''
-                                                
-                                                if (linkedNode && linkedNode.id && !nodeMap.has(linkedNode.id)) {
-                                                    processedNodes.push({
-                                                        id: linkedNode.id,
-                                                        name: linkedNode.title || '无标题',
-                                                        label: linkedNode.title || '无标题',
-                                                        type: 'Note'
-                                                    })
-                                                    nodeMap.set(linkedNode.id, true)
-                                                }
-                                                if (linkedNode && linkedNode.id) {
-                                                    processedLinks.push({
-                                                        source: node.id,
-                                                        target: linkedNode.id,
-                                                        type: 'RELATED',
-                                                        label: label
-                                                    })
-                                                }
-                                            })
+                                          node.related.forEach((rel: any) => {
+                                            const tn = rel.target
+                                            const tid = typeof tn === 'object' ? tn.id : tn
+                                            if (tid && rel.id) {
+                                              if (!rMap.has(rel.id)) rMap.set(rel.id, { source: node.id, target: tid, type: 'RELATED', label: rel.label || '相关' })
+                                              if (typeof tn === 'object') t(tn)
+                                            }
+                                          })
                                         }
-                                     })
-                                     nodes.value = processedNodes
-                                     links.value = processedLinks
-                                     initGraph()
-                                }
+                                      }
+                                      graphData.forEach((item: any) => t(item))
+                                      nodes.value = pNodes
+                                      links.value = Array.from(rMap.values())
+                                      initGraph()
+                                 }
                                 
                                 // 收到完成信号后，不再等待流结束，直接退出
                                 return 
@@ -810,36 +789,37 @@ async function handleAnalyze() {
 
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
+        let buffer = ''
         
         while (true) {
             const { done, value } = await reader.read()
             if (done) break
             
-            const chunk = decoder.decode(value, { stream: true })
-            const lines = chunk.split('\n\n')
+            buffer += decoder.decode(value, { stream: true })
+            const blocks = buffer.split('\n\n')
+            buffer = blocks.pop() || '' 
             
-            for (const line of lines) {
-                if (line.startsWith('data:')) {
-                    const data = line.slice(5) // Remove 'data:' prefix
-                    // Note: backend sends raw tokens/text directly in data
-                    // It doesn't seem to wrap it in JSON based on my AiServiceImpl
-                    // let's append it directly.
-                    // Actually, SseEmitter sends "data:token\n\n". 
-                    // So data is the token string.
-                    analysisResult.value += data
-                    
-                    // Render markdown incrementally
-                    // Throttle optimization could be added here if needed
-                    if (previewRef.value) {
-                         Vditor.preview(previewRef.value, analysisResult.value, {
-                            mode: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-                            theme: {
-                                current: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-                            },
-                            hljs: {
-                                style: 'dracula'
+            for (const block of blocks) {
+                const lines = block.split('\n')
+                for (const line of lines) {
+                    if (line.startsWith('data:')) {
+                        const data = line.slice(5).trim()
+                        if (data) {
+                            analysisResult.value += data
+                            
+                            // Render markdown incrementally
+                            if (previewRef.value) {
+                                 Vditor.preview(previewRef.value, analysisResult.value, {
+                                    mode: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+                                    theme: {
+                                        current: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+                                    },
+                                    hljs: {
+                                        style: 'dracula'
+                                    }
+                                })
                             }
-                        })
+                        }
                     }
                 }
             }
@@ -868,8 +848,13 @@ async function handleAnalyze() {
        <n-button circle size="small" secondary class="bg-white/80 dark:bg-gray-800/80 backdrop-blur shadow-sm" @click="refreshLayout">
          <template #icon><n-icon :component="RefreshOutline" /></template>
        </n-button>
-       <n-button circle size="small" secondary class="bg-white/80 dark:bg-gray-800/80 backdrop-blur shadow-sm" @click="fitView">
-         <template #icon><n-icon :component="ExpandOutline" /></template>
+<!--       <n-button circle size="small" secondary class="bg-white/80 dark:bg-gray-800/80 backdrop-blur shadow-sm" @click="fitView">-->
+<!--         <template #icon><n-icon :component="ExpandOutline" /></template>-->
+<!--       </n-button>-->
+       <div class="w-px h-6 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+       <n-button size="small" secondary :loading="rebuildingGraph" @click="rebuildExplicitGraph">
+         <template #icon><n-icon :component="SyncOutline" /></template>
+         {{ rebuildingGraph ? '重建中...' : '重建双向链接' }}
        </n-button>
        <div class="w-px h-6 bg-gray-300 dark:bg-gray-700 mx-1"></div>
        <n-button size="small" type="primary" class="bg-gradient-to-r from-blue-500 to-indigo-600 border-none shadow-md" :loading="aiAnalyzing" @click="analyzeRelations">
@@ -956,7 +941,7 @@ async function handleAnalyze() {
                      </div>
                      <div v-if="!analysisResult">
                         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3 leading-relaxed">
-                             点击下方按钮，请求 AI 分析该知识点在当前项目中的应用场景。
+                             点击下方按钮，请求 AI 分析该知识点。
                         </p>
                          <n-button 
                             block 

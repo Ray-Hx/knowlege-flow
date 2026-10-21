@@ -19,6 +19,7 @@ export interface ContentItem {
     author?: string
     publishTime?: string
     summary?: string
+    contentText?: string
     tags?: string[]
     status: number // 0-Unread, 1-Read, 2-Starred
     createdTime: string
@@ -55,7 +56,7 @@ export const contentApi = {
     },
 
     // Items
-    listItems: (params: { page: number; size: number; status?: number; sourceId?: number; keyword?: string }) => {
+    listItems: (params: { page: number; size: number; status?: number; sourceId?: number; isUpload?: boolean; keyword?: string }) => {
         return request.get<any, PageResult<ContentItem>>('/content/items', { params })
     },
     getItem: (id: number) => {
@@ -66,5 +67,14 @@ export const contentApi = {
     },
     deleteItem: (id: number) => {
         return request.delete(`/content/items/${id}`)
+    },
+    uploadFile: (file: File) => {
+        const formData = new FormData()
+        formData.append('file', file)
+        return request.post<any, number>('/content/upload', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        })
     }
 }

@@ -53,7 +53,7 @@ const initTrendChart = () => {
   const values = trendData.value.map(d => d.noteCount || 0)
 
   trendChart.setOption({
-    tooltip: { trigger: 'axis', formatter: (params: any) => `${params[0].name}周<br/>新增笔记: ${params[0].value}` },
+    tooltip: { trigger: 'axis', formatter: (params: any) => `${params[0].name}<br/>新增笔记: ${params[0].value}` },
     grid: { left: '3%', right: '4%', bottom: '8%', top: '10%', containLabel: true },
     xAxis: {
       type: 'category',
@@ -148,7 +148,7 @@ const initHeatmapChart = () => {
     tooltip: {
       formatter: (params: any) => {
         const val = params.value[1]
-        return `${params.value[0]}<br/>创建笔记: <b>${val}</b> 篇`
+        return `${params.value[0]}<br/>活跃笔记: <b>${val}</b> 篇`
       }
     },
     visualMap: {
@@ -362,7 +362,7 @@ onUnmounted(() => {
       <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- 近12周学习趋势 -->
         <div class="glass-card p-6 flex flex-col">
-          <h3 class="text-lg font-bold text-gray-700 mb-4">📈 近12周学习趋势</h3>
+          <h3 class="text-lg font-bold text-gray-700 mb-4">📈 近期学习趋势</h3>
           <div ref="trendChartRef" class="flex-1 min-h-[240px] w-full"></div>
         </div>
 

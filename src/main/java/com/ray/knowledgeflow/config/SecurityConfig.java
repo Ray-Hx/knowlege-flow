@@ -1,7 +1,9 @@
 package com.ray.knowledgeflow.config;
 
 import com.ray.knowledgeflow.security.UserDetailsServiceImpl;
+import com.ray.knowledgeflow.security.jwt.JwtAuthenticationEntryPoint;
 import com.ray.knowledgeflow.security.jwt.JwtAuthenticationTokenFilter;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -37,13 +39,16 @@ public class SecurityConfig {
     private final JwtAuthenticationTokenFilter jwtAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
     private final PasswordEncoder passwordEncoder;
+    private final JwtAuthenticationEntryPoint authenticationEntryPoint;
 
     public SecurityConfig(@Lazy JwtAuthenticationTokenFilter jwtAuthFilter,
             @Lazy UserDetailsServiceImpl userDetailsService,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            JwtAuthenticationEntryPoint authenticationEntryPoint) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.userDetailsService = userDetailsService;
         this.passwordEncoder = passwordEncoder;
+        this.authenticationEntryPoint = authenticationEntryPoint;
     }
 
     @Bean
@@ -52,11 +57,16 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**", "/actuator/**").permitAll()
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
+                        .requestMatchers("/auth/**").permitAll()
+                        // 仅放行健康检查，env/configprops 等端点会暴露数据库连接串与密钥
+                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(org.springframework.http.HttpMethod.GET, "/community/**").permitAll()
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(authenticationEntryPoint))
                 .authenticationProvider(authenticationProvider())
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 

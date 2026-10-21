@@ -19,11 +19,13 @@ public interface IContentItemService extends IService<ContentItem> {
      * @param userId   用户 ID
      * @param status   状态过滤 (可选)
      * @param sourceId 来源过滤 (可选)
+     * @param isUpload 是否为手动上传 (可选)
      * @param keyword  关键词搜索 (可选)
      * @param page     页码
      * @param size     每页数量
      */
-    IPage<ContentItemDto> pageByUserId(Long userId, Integer status, Long sourceId, String keyword, int page, int size);
+    IPage<ContentItemDto> pageByUserId(Long userId, Integer status, Long sourceId, Boolean isUpload, String keyword,
+            int page, int size);
 
     /**
      * 获取内容详情
@@ -44,4 +46,7 @@ public interface IContentItemService extends IService<ContentItem> {
      * 删除内容项
      */
     void deleteItem(Long userId, Long itemId);
+
+    /** 批量删除指定来源的内容，并为每条内容发布索引删除事件。 */
+    int deleteBySource(Long userId, Long sourceId);
 }

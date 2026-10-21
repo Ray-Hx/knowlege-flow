@@ -2,6 +2,7 @@ package com.ray.knowledgeflow.config;
 
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
+import dev.langchain4j.model.openai.OpenAiEmbeddingModel;
 import dev.langchain4j.model.openai.OpenAiStreamingChatModel;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -11,7 +12,7 @@ import java.time.Duration;
 
 /**
  * AI 模型配置
- * - 嵌入模型：智谱 AI (embedding-3)
+ * - 嵌入模型：通义千问 DashScope (text-embedding-v4，通过 OpenAI 兼容 API)
  * - 聊天模型：DeepSeek (deepseek-chat) 通过 OpenAI 兼容 API
  *
  * @author Ray
@@ -20,8 +21,17 @@ import java.time.Duration;
 @Configuration
 public class AiConfig {
 
-    @Value("${ZHIPUAI_API_KEY:}")
-    private String zhipuApiKey;
+    @Value("${knowledge-flow.ai.qwen.api-key:${QWEN_API_KEY:}}")
+    private String qwenApiKey;
+
+    @Value("${knowledge-flow.ai.qwen.base-url:${QWEN_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}}")
+    private String qwenBaseUrl;
+
+    @Value("${knowledge-flow.ai.qwen.model:${QWEN_EMBEDDING_MODEL:text-embedding-v4}}")
+    private String qwenEmbeddingModel;
+
+    @Value("${knowledge-flow.ai.qwen.dimensions:${QWEN_EMBEDDING_DIMENSIONS:2048}}")
+    private Integer qwenEmbeddingDimensions;
 
     @Value("${langchain4j.open-ai.base-url:https://api.deepseek.com}")
     private String deepseekBaseUrl;
@@ -36,13 +46,19 @@ public class AiConfig {
     private Double temperature;
 
     /**
-     * 配置 Zhipu AI 嵌入模型 (embedding-3) - 用于 RAG 向量化
+     * 配置通义千问文本嵌入模型 - 用于 RAG 向量化。
+     * DashScope 提供 OpenAI 兼容的 /embeddings 接口，
+     * 因此可复用 LangChain4j 的 OpenAiEmbeddingModel。
      */
     @Bean
     public EmbeddingModel embeddingModel() {
-        return dev.langchain4j.model.zhipu.ZhipuAiEmbeddingModel.builder()
-                .apiKey(zhipuApiKey)
-                .model("embedding-3")
+        return OpenAiEmbeddingModel.builder()
+                .baseUrl(qwenBaseUrl)
+                .apiKey(qwenApiKey)
+                .modelName(qwenEmbeddingModel)
+                .dimensions(qwenEmbeddingDimensions)
+                .timeout(Duration.ofSeconds(30))
+                .maxRetries(2)
                 .build();
     }
 

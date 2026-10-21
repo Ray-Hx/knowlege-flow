@@ -19,8 +19,8 @@ import com.ray.knowledgeflow.module.note.mapper.NoteFolderMapper;
 import com.ray.knowledgeflow.module.note.mapper.NoteVersionMapper;
 import com.ray.knowledgeflow.module.note.service.INoteService;
 import com.ray.knowledgeflow.module.note.service.NoteEngagementService;
+import com.ray.knowledgeflow.module.note.service.NoteLinkService;
 import com.ray.knowledgeflow.module.ai.message.AiProcessProducer;
-import com.ray.knowledgeflow.module.knowledge.service.GraphService;
 import com.ray.knowledgeflow.module.search.message.IndexUpdateProducer;
 import com.ray.knowledgeflow.module.search.service.ISearchService;
 import com.ray.knowledgeflow.module.user.entity.SysUser;
@@ -67,15 +67,12 @@ public class NoteServiceImpl implements INoteService {
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
 
     // 消息生产者
-    private final AiProcessProducer aiProcessProducer;
     private final IndexUpdateProducer indexUpdateProducer;
-    private final GraphService graphService;
     private final NoteEngagementService engagementService;
     private final ISearchService searchService;
     private final IUserRelationService userRelationService;
+    private final NoteLinkService noteLinkService;
 
-    // 笔记链接正则: [[笔记标题]]
-    private static final Pattern LINK_PATTERN = Pattern.compile("\\[\\[([^!][^\\]]*?)\\]\\]");
     // 内容引用正则: [[!article:123]] 或 [[!article:123|标题]]
     private static final Pattern CONTENT_LINK_PATTERN = Pattern.compile("\\[\\[!article:(\\d+)(?:\\|([^\\]]+))?\\]\\]");
     private static final int MAX_VERSIONS = 20;
@@ -108,21 +105,17 @@ public class NoteServiceImpl implements INoteService {
 
         noteEntryMapper.insert(note);
 
-        // 发布保存事件（保留现有事件机制）
+        // MySQL 关系表是双向链接事实源，和笔记内容在同一事务内提交。
+        noteLinkService.syncExplicitLinks(note);
+
+        // Neo4j 监听器在事务提交后消费该事件。
         eventPublisher.publishEvent(new com.ray.knowledgeflow.module.search.event.NoteSavedEvent(this, note));
 
         // 异步触发 AI 处理
         if (dto.getContentMd() != null && !dto.getContentMd().isEmpty()) {
-            aiProcessProducer.sendSummaryTask(note.getId(), userId, note.getTitle(), dto.getContentMd());
-            aiProcessProducer.sendTagExtractionTask(note.getId(), userId, note.getTitle(), dto.getContentMd());
-            aiProcessProducer.sendGraphBuildTask(note.getId(), userId, note.getTitle(), dto.getContentMd());
+            eventPublisher.publishEvent(new com.ray.knowledgeflow.module.ai.event.NoteAiProcessRequestedEvent(
+                    this, note.getId(), userId, note.getTitle(), dto.getContentMd()));
         }
-
-        // 异步更新搜索索引
-        indexUpdateProducer.sendCreateIndex("NOTE", note.getId(), userId, note.getTitle(), dto.getContentMd());
-
-        // 异步: 同步到知识图谱
-        graphService.syncNoteToGraph(note);
 
         return getNoteDetail(userId, note.getId());
     }
@@ -131,6 +124,13 @@ public class NoteServiceImpl implements INoteService {
     @Transactional(rollbackFor = Exception.class)
     public NoteDetailDto updateNote(Long userId, Long noteId, UpdateNoteDto dto) {
         NoteEntry note = getAndCheckOwnership(userId, noteId);
+
+        if (dto.getFolderId() != null && dto.getFolderId() > 0) {
+            NoteFolder folder = folderMapper.selectById(dto.getFolderId());
+            if (folder == null || !userId.equals(folder.getUserId())) {
+                throw new BusinessException(404, "文件夹不存在");
+            }
+        }
 
         // 保存当前版本到历史
         saveVersion(note);
@@ -158,24 +158,26 @@ public class NoteServiceImpl implements INoteService {
         if (dto.getIsPublic() != null) {
             note.setIsPublic(dto.getIsPublic());
         }
+        if (dto.getTags() != null) {
+            note.setTags(dto.getTags());
+        }
+        if (dto.getSummary() != null) {
+            note.setSummary(dto.getSummary());
+        }
 
         noteEntryMapper.updateById(note);
+
+        // 标题变化不会影响稳定 ID 链接；正文变化时原子替换显式出链。
+        noteLinkService.syncExplicitLinks(note);
 
         // 发布保存事件（保留现有事件机制）
         eventPublisher.publishEvent(new com.ray.knowledgeflow.module.search.event.NoteSavedEvent(this, note));
 
         // 异步触发 AI 处理（如果内容有更新）
         if (dto.getContentMd() != null && !dto.getContentMd().isEmpty()) {
-            aiProcessProducer.sendSummaryTask(note.getId(), userId, note.getTitle(), note.getContentMd());
-            aiProcessProducer.sendTagExtractionTask(note.getId(), userId, note.getTitle(), note.getContentMd());
-            aiProcessProducer.sendGraphBuildTask(note.getId(), userId, note.getTitle(), note.getContentMd());
+            eventPublisher.publishEvent(new com.ray.knowledgeflow.module.ai.event.NoteAiProcessRequestedEvent(
+                    this, note.getId(), userId, note.getTitle(), note.getContentMd()));
         }
-
-        // 异步更新搜索索引
-        indexUpdateProducer.sendUpdateIndex("NOTE", note.getId(), userId, note.getTitle(), note.getContentMd());
-
-        // 异步: 同步到知识图谱
-        graphService.syncNoteToGraph(note);
 
         return getNoteDetail(userId, noteId);
     }
@@ -189,9 +191,16 @@ public class NoteServiceImpl implements INoteService {
         versionMapper.delete(new LambdaQueryWrapper<NoteVersion>()
                 .eq(NoteVersion::getNoteId, noteId));
 
-        // 删除附件记录（实际文件保留在MinIO）
-        attachmentMapper.delete(new LambdaQueryWrapper<NoteAttachment>()
-                .eq(NoteAttachment::getNoteId, noteId));
+        // 删除附件记录（实际文件保留在MinIO，note_attachment 表可能不存在，降级处理）
+        try {
+            attachmentMapper.delete(new LambdaQueryWrapper<NoteAttachment>()
+                    .eq(NoteAttachment::getNoteId, noteId));
+        } catch (Exception e) {
+            log.warn("删除附件记录失败（表可能不存在）: {}", e.getMessage());
+        }
+
+        // 先清理所有入链与出链，防止逻辑删除后留下悬挂关系。
+        noteLinkService.deleteLinksForNote(noteId);
 
         // 删除笔记
         noteEntryMapper.deleteById(noteId);
@@ -199,8 +208,6 @@ public class NoteServiceImpl implements INoteService {
         // 发布删除事件（保留现有事件机制）
         eventPublisher.publishEvent(new com.ray.knowledgeflow.module.search.event.NoteDeletedEvent(this, noteId));
 
-        // 异步删除搜索索引
-        indexUpdateProducer.sendDeleteIndex("NOTE", noteId, userId);
     }
 
     @Override
@@ -218,23 +225,61 @@ public class NoteServiceImpl implements INoteService {
             }
         }
 
-        // 解析双向链接
-        dto.setOutgoingLinks(parseOutgoingLinks(userId, note.getContentMd()));
-        dto.setIncomingLinks(findIncomingLinks(userId, noteId, note.getTitle()));
+        // 从稳定关系表查询双向链接，不再扫描 Markdown 正文。
+        dto.setOutgoingLinks(noteLinkService.getOutgoingLinks(userId, noteId, false));
+        dto.setIncomingLinks(noteLinkService.getIncomingLinks(userId, noteId, false));
 
         // 解析内容引用链接
         dto.setContentLinks(parseContentLinks(userId, note.getContentMd()));
 
-        // 获取附件列表
-        List<NoteAttachment> attachments = attachmentMapper.selectList(new LambdaQueryWrapper<NoteAttachment>()
-                .eq(NoteAttachment::getNoteId, noteId)
-                .orderByDesc(NoteAttachment::getCreatedTime));
-
-        dto.setAttachments(attachments.stream()
-                .map(this::toAttachmentDto)
-                .collect(Collectors.toList()));
+        // 获取附件列表（note_attachment 表可能尚未创建，降级处理）
+        try {
+            List<NoteAttachment> attachments = attachmentMapper.selectList(new LambdaQueryWrapper<NoteAttachment>()
+                    .eq(NoteAttachment::getNoteId, noteId)
+                    .orderByDesc(NoteAttachment::getCreatedTime));
+            dto.setAttachments(attachments.stream()
+                    .map(this::toAttachmentDto)
+                    .collect(Collectors.toList()));
+        } catch (Exception e) {
+            log.warn("获取附件列表失败（表可能不存在）: {}", e.getMessage());
+            dto.setAttachments(new ArrayList<>());
+        }
 
         return dto;
+    }
+
+    @Override
+    public java.util.List<NoteVersionDto> getNoteVersions(Long userId, Long noteId) {
+        getAndCheckOwnership(userId, noteId);
+
+        List<NoteVersion> versions = versionMapper.selectList(new LambdaQueryWrapper<NoteVersion>()
+                .eq(NoteVersion::getNoteId, noteId)
+                .orderByDesc(NoteVersion::getCreatedTime));
+
+        return versions.stream().map(v -> {
+            NoteVersionDto vdto = new NoteVersionDto();
+            BeanUtils.copyProperties(v, vdto);
+            // 内容很大，列表时不返回完整内容，只返回基本信息
+            vdto.setContentMd(null);
+            return vdto;
+        }).collect(Collectors.toList());
+    }
+
+    @Override
+    public NoteVersionDto getNoteVersionDetail(Long userId, Long noteId, Long versionId) {
+        getAndCheckOwnership(userId, noteId);
+
+        NoteVersion version = versionMapper.selectOne(new LambdaQueryWrapper<NoteVersion>()
+                .eq(NoteVersion::getId, versionId)
+                .eq(NoteVersion::getNoteId, noteId));
+
+        if (version == null) {
+            throw new BusinessException(404, "版本记录不存在");
+        }
+
+        NoteVersionDto vdto = new NoteVersionDto();
+        BeanUtils.copyProperties(version, vdto);
+        return vdto;
     }
 
     @Override
@@ -280,21 +325,17 @@ public class NoteServiceImpl implements INoteService {
 
     @Override
     public IPage<NoteListDto> searchNotes(Long userId, String keyword, Integer page, Integer size) {
-        Page<NoteEntry> pageParam = new Page<>(page, size);
+        // 使用 SearchService 通过 Elasticsearch 进行高性能搜索（含高亮）
+        org.springframework.data.domain.Page<NoteListDto> searchResult = searchService.searchNotes(keyword, userId,
+                page - 1, size);
 
-        LambdaQueryWrapper<NoteEntry> wrapper = new LambdaQueryWrapper<NoteEntry>()
-                .eq(NoteEntry::getUserId, userId)
-                .and(w -> w.like(NoteEntry::getTitle, keyword)
-                        .or()
-                        .like(NoteEntry::getContentMd, keyword))
-                .orderByDesc(NoteEntry::getUpdatedTime);
+        // 转换为 MyBatis-Plus 的 IPage 格式以兼容前端列表
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<NoteListDto> resultPage = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
+                page, size);
+        resultPage.setRecords(searchResult.getContent());
+        resultPage.setTotal(searchResult.getTotalElements());
 
-        IPage<NoteEntry> notePage = noteEntryMapper.selectPage(pageParam, wrapper);
-
-        IPage<NoteListDto> dtoPage = notePage.convert(this::toBasicListDto);
-        fillFolderNames(dtoPage.getRecords());
-
-        return dtoPage;
+        return resultPage;
     }
 
     @Override
@@ -370,22 +411,20 @@ public class NoteServiceImpl implements INoteService {
             }
         }
 
-        // Fill Author Info
-        SysUser user = userMapper.selectById(note.getUserId());
-        if (user != null) {
-            dto.setAuthorName(user.getUsername());
-            dto.setAuthorAvatar(user.getAvatar());
+        // 公开详情只暴露公开发布的关系端点。
+        dto.setOutgoingLinks(noteLinkService.getOutgoingLinks(note.getUserId(), noteId, true));
+        dto.setIncomingLinks(noteLinkService.getIncomingLinks(note.getUserId(), noteId, true));
+
+        // Attachments（note_attachment 表可能尚未创建，降级处理）
+        try {
+            List<NoteAttachment> attachments = attachmentMapper.selectList(new LambdaQueryWrapper<NoteAttachment>()
+                    .eq(NoteAttachment::getNoteId, noteId)
+                    .orderByDesc(NoteAttachment::getCreatedTime));
+            dto.setAttachments(attachments.stream().map(this::toAttachmentDto).collect(Collectors.toList()));
+        } catch (Exception e) {
+            log.warn("获取附件列表失败（表可能不存在）: {}", e.getMessage());
+            dto.setAttachments(new ArrayList<>());
         }
-
-        // Parse links (using author's context)
-        dto.setOutgoingLinks(parseOutgoingLinks(note.getUserId(), note.getContentMd()));
-        dto.setIncomingLinks(findIncomingLinks(note.getUserId(), noteId, note.getTitle()));
-
-        // Attachments
-        List<NoteAttachment> attachments = attachmentMapper.selectList(new LambdaQueryWrapper<NoteAttachment>()
-                .eq(NoteAttachment::getNoteId, noteId)
-                .orderByDesc(NoteAttachment::getCreatedTime));
-        dto.setAttachments(attachments.stream().map(this::toAttachmentDto).collect(Collectors.toList()));
 
         // Fill engagement stats
         dto.setViewCount(engagementService.getViewCount(noteId));
@@ -521,6 +560,8 @@ public class NoteServiceImpl implements INoteService {
         SysUserProfile profile = userProfileMapper.selectById(userId);
         if (profile != null) {
             dto.setBio(profile.getBio());
+            dto.setGithubId(profile.getGithubId());
+            dto.setLearningGoals(profile.getLearningGoals());
         }
 
         // 统计公开笔记数
@@ -690,7 +731,9 @@ public class NoteServiceImpl implements INoteService {
                         note.getId(),
                         userId,
                         note.getTitle(),
-                        note.getContentMd());
+                        note.getContentMd(),
+                        note.getSummary(),
+                        note.getTags());
                 count++;
             } catch (Exception e) {
                 log.warn("笔记索引失败: noteId={}, error={}", note.getId(), e.getMessage());
@@ -747,54 +790,6 @@ public class NoteServiceImpl implements INoteService {
                 }
             }
         }
-    }
-
-    private List<NoteLinkDto> parseOutgoingLinks(Long userId, String content) {
-        if (content == null || content.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        List<NoteLinkDto> links = new ArrayList<>();
-        Matcher matcher = LINK_PATTERN.matcher(content);
-
-        while (matcher.find()) {
-            String title = matcher.group(1);
-            // Search for note with this title
-            List<NoteEntry> targets = noteEntryMapper.selectList(new LambdaQueryWrapper<NoteEntry>()
-                    .eq(NoteEntry::getUserId, userId)
-                    .eq(NoteEntry::getTitle, title)
-                    .last("LIMIT 1"));
-
-            if (!targets.isEmpty()) {
-                NoteEntry target = targets.get(0);
-                NoteLinkDto link = new NoteLinkDto();
-                link.setId(target.getId());
-                link.setTitle(target.getTitle());
-                link.setSummary(target.getSummary());
-                links.add(link);
-            }
-        }
-        return links;
-    }
-
-    private List<NoteLinkDto> findIncomingLinks(Long userId, Long noteId, String title) {
-        if (title == null || title.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        // Find notes containing [[title]]
-        String searchStr = "[[" + title + "]]";
-        List<NoteEntry> referringNotes = noteEntryMapper.selectList(new LambdaQueryWrapper<NoteEntry>()
-                .eq(NoteEntry::getUserId, userId)
-                .like(NoteEntry::getContentMd, searchStr));
-
-        return referringNotes.stream().map(note -> {
-            NoteLinkDto link = new NoteLinkDto();
-            link.setId(note.getId());
-            link.setTitle(note.getTitle());
-            link.setSummary(note.getSummary());
-            return link;
-        }).collect(Collectors.toList());
     }
 
     private List<ContentLinkDto> parseContentLinks(Long userId, String content) {
