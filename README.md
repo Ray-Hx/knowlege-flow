@@ -268,7 +268,7 @@ knowledge-flow/
 
 **Ray Huang**
 - **GitHub**: [@Ray-Hx](https://github.com/Ray-Hx)
-- **Email**: [huangrui@example.com]
+- **Email**: [zeyiwo@gmail.com]
 
 ---
 
